@@ -1,6 +1,8 @@
 import { EverythingInOneWorkspace } from "@/components/marketing/everything-in-one-workspace"
+import { Faqs } from "@/components/marketing/faqs"
 import { Hero } from "@/components/marketing/hero"
 import { HowItWorks } from "@/components/marketing/how-it-works"
+import { Pricing } from "@/components/marketing/pricing"
 import { Privacy } from "@/components/marketing/privacy"
 import { Stats } from "@/components/marketing/stats"
 import { Testimonials } from "@/components/marketing/testimonials"
@@ -14,7 +16,9 @@ export default function Page() {
       <Privacy />
       <Stats />
       <Testimonials />
-      {/* Remaining landing sections (pricing, FAQs, footer, …) go here. */}
+      <Pricing />
+      <Faqs />
+      {/* Remaining landing sections (footer CTA, footer) go here. */}
     </>
   )
 }
