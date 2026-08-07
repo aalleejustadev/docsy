@@ -14,7 +14,7 @@ const CTA_CLASSES =
 
 function Hero() {
   return (
-    <section className="mx-auto w-full max-w-6xl px-6 py-16 lg:py-24">
+    <section className="mx-auto w-full max-w-6xl px-6 pt-16 pb-13 lg:pt-24 lg:pb-19">
       <div className="grid items-center gap-12 lg:grid-cols-2 lg:gap-16">
         <div className="flex flex-col items-start gap-6">
           <Badge
