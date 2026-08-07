@@ -1,17 +1,11 @@
 import Link from "next/link"
 
+import { mainNav } from "@/lib/site-config"
 import { Button } from "@/components/ui/button"
-import { DocsyLogo } from "@/components/docsy-logo"
-import { MobileNav } from "@/components/mobile-nav"
-import { ModeToggle } from "@/components/mode-toggle"
-import { SearchDocsButton } from "@/components/search-docs-button"
-
-const navItems = [
-  { href: "#product", label: "Product" },
-  { href: "#how-it-works", label: "How it works" },
-  { href: "#security", label: "Security" },
-  { href: "#pricing", label: "Pricing" },
-]
+import { DocsyLogo } from "@/components/brand/docsy-logo"
+import { MobileNav } from "@/components/layout/mobile-nav"
+import { SearchDocsButton } from "@/components/search/search-docs-button"
+import { ModeToggle } from "@/components/theme/mode-toggle"
 
 function SiteHeader() {
   return (
@@ -22,7 +16,7 @@ function SiteHeader() {
         </Link>
 
         <nav className="hidden items-center gap-6 md:flex">
-          {navItems.map((item) => (
+          {mainNav.map((item) => (
             <Link
               key={item.href}
               href={item.href}
@@ -51,11 +45,11 @@ function SiteHeader() {
           >
             Try Docsy free
           </Button>
-          <MobileNav items={navItems} className="md:hidden" />
+          <MobileNav items={mainNav} className="md:hidden" />
         </div>
       </div>
     </header>
   )
 }
 
-export { SiteHeader, navItems }
+export { SiteHeader }

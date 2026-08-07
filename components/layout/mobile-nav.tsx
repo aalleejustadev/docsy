@@ -4,6 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { MenuIcon } from "lucide-react"
 
+import type { NavItem } from "@/lib/site-config"
 import { Button } from "@/components/ui/button"
 import {
   Sheet,
@@ -14,14 +15,14 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import { DocsyLogo } from "@/components/docsy-logo"
-import { SearchDocsButton } from "@/components/search-docs-button"
+import { DocsyLogo } from "@/components/brand/docsy-logo"
+import { SearchDocsButton } from "@/components/search/search-docs-button"
 
 function MobileNav({
   items,
   className,
 }: {
-  items: { href: string; label: string }[]
+  items: NavItem[]
   className?: string
 }) {
   const [open, setOpen] = React.useState(false)

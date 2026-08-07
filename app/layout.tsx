@@ -2,8 +2,9 @@ import type { Metadata } from "next"
 import { Geist, Geist_Mono } from "next/font/google"
 
 import "./globals.css"
-import { ThemeProvider } from "@/components/theme-provider"
-import { cn } from "@/lib/utils";
+import { siteConfig } from "@/lib/site-config"
+import { cn } from "@/lib/utils"
+import { ThemeProvider } from "@/components/theme/theme-provider"
 
 const geist = Geist({subsets:['latin'],variable:'--font-sans'})
 
@@ -14,11 +15,10 @@ const fontMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Docsy — Documentation your team actually reads",
-    template: "%s · Docsy",
+    default: `${siteConfig.name} — Documentation your team actually reads`,
+    template: `%s · ${siteConfig.name}`,
   },
-  description:
-    "Docsy turns scattered docs into a single searchable workspace your team can trust.",
+  description: siteConfig.description,
 }
 
 export default function RootLayout({
