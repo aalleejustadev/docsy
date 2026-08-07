@@ -3,6 +3,7 @@ import { Hero } from "@/components/marketing/hero"
 import { HowItWorks } from "@/components/marketing/how-it-works"
 import { Privacy } from "@/components/marketing/privacy"
 import { Stats } from "@/components/marketing/stats"
+import { Testimonials } from "@/components/marketing/testimonials"
 
 export default function Page() {
   return (
@@ -12,7 +13,8 @@ export default function Page() {
       <EverythingInOneWorkspace />
       <Privacy />
       <Stats />
-      {/* Remaining landing sections (testimonials, pricing, FAQs, …) go here. */}
+      <Testimonials />
+      {/* Remaining landing sections (pricing, FAQs, footer, …) go here. */}
     </>
   )
 }
