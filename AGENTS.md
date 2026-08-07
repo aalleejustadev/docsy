@@ -21,6 +21,7 @@ components/
   search/               search trigger + command palette
   theme/                theme-provider, mode-toggle
   brand/                logo mark and wordmark
+  common/               small cross-cutting pieces (e.g. typing-dots)
 hooks/                  shared React hooks
 lib/
   site-config.ts        site metadata + navigation data

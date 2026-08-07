@@ -1,3 +1,10 @@
+import { Hero } from "@/components/marketing/hero"
+
 export default function Page() {
-  return <>{/* Landing sections (hero, how it works, pricing, …) go here. */}</>
+  return (
+    <>
+      <Hero />
+      {/* Remaining landing sections (how it works, pricing, …) go here. */}
+    </>
+  )
 }
