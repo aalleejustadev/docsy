@@ -35,11 +35,13 @@ function Testimonials() {
         title="The people who can't afford a wrong answer."
       />
 
-      <div className="mt-14 grid gap-6 md:grid-cols-3">
+      {/* Below `md` the cards become a swipeable rail: each card is 82% of the
+          content width, so the next one peeks in by about a quarter. */}
+      <div className="no-scrollbar -mx-6 mt-14 flex snap-x snap-mandatory scroll-pl-6 gap-4 overflow-x-auto px-6 md:mx-0 md:grid md:grid-cols-3 md:gap-6 md:overflow-visible md:px-0">
         {TESTIMONIALS.map((testimonial) => (
           <Card
             key={testimonial.name}
-            className="[--card-spacing:--spacing(7)]"
+            className="w-[82%] shrink-0 snap-start [--card-spacing:--spacing(7)] md:w-auto"
           >
             <CardContent>
               <blockquote className="text-[0.9375rem] leading-relaxed">

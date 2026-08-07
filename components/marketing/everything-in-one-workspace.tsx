@@ -64,9 +64,14 @@ function EverythingInOneWorkspace() {
           title="Built for people who have to be right — and prove it."
         />
 
-        <div className="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        {/* Below `md` the cards become a swipeable rail: each card is 82% of
+            the content width, so the next one peeks in by about a quarter. */}
+        <div className="no-scrollbar -mx-6 mt-14 flex snap-x snap-mandatory scroll-pl-6 gap-4 overflow-x-auto px-6 md:mx-0 md:grid md:grid-cols-2 md:gap-6 md:overflow-visible md:px-0 lg:grid-cols-3">
           {FEATURES.map(({ icon: Icon, title, description }) => (
-            <Card key={title} className="[--card-spacing:--spacing(6)]">
+            <Card
+              key={title}
+              className="w-[82%] shrink-0 snap-start [--card-spacing:--spacing(6)] md:w-auto"
+            >
               <CardHeader className="gap-2">
                 <span className="mb-3 flex size-9 items-center justify-center rounded-lg bg-muted text-brand">
                   <Icon className="size-4.5" />
