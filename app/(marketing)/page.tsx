@@ -1,5 +1,6 @@
 import { EverythingInOneWorkspace } from "@/components/marketing/everything-in-one-workspace"
 import { Faqs } from "@/components/marketing/faqs"
+import { FooterCta } from "@/components/marketing/footer-cta"
 import { Hero } from "@/components/marketing/hero"
 import { HowItWorks } from "@/components/marketing/how-it-works"
 import { Pricing } from "@/components/marketing/pricing"
@@ -18,7 +19,8 @@ export default function Page() {
       <Testimonials />
       <Pricing />
       <Faqs />
-      {/* Remaining landing sections (footer CTA, footer) go here. */}
+      <FooterCta />
+      {/* The site footer goes here. */}
     </>
   )
 }
