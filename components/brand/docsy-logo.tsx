@@ -37,11 +37,30 @@ function DocsyMark({ className, ...props }: React.ComponentProps<"svg">) {
   )
 }
 
-function DocsyLogo({ className, ...props }: React.ComponentProps<"span">) {
+const MARK_SIZES = {
+  default: "size-8",
+  sm: "size-7",
+}
+
+const WORDMARK_SIZES = {
+  default: "text-lg",
+  sm: "text-base",
+}
+
+function DocsyLogo({
+  size = "default",
+  className,
+  ...props
+}: React.ComponentProps<"span"> & { size?: keyof typeof MARK_SIZES }) {
   return (
     <span className={cn("flex items-center gap-2.5", className)} {...props}>
-      <DocsyMark />
-      <span className="font-heading text-lg font-bold tracking-tight">
+      <DocsyMark className={MARK_SIZES[size]} />
+      <span
+        className={cn(
+          "font-heading font-bold tracking-tight",
+          WORDMARK_SIZES[size]
+        )}
+      >
         Docsy
       </span>
     </span>

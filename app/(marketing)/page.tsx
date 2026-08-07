@@ -20,7 +20,6 @@ export default function Page() {
       <Pricing />
       <Faqs />
       <FooterCta />
-      {/* The site footer goes here. */}
     </>
   )
 }
