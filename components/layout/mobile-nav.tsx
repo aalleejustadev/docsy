@@ -4,6 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import { MenuIcon } from "lucide-react"
 
+import { useSession } from "@/lib/auth-client"
 import type { NavItem } from "@/lib/site-config"
 import { Button } from "@/components/ui/button"
 import {
@@ -15,6 +16,10 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
+import {
+  useAuthDialog,
+  type AuthMode,
+} from "@/components/auth/auth-dialog-provider"
 import { DocsyLogo } from "@/components/brand/docsy-logo"
 import { SearchDocsButton } from "@/components/search/search-docs-button"
 
@@ -26,9 +31,29 @@ function MobileNav({
   className?: string
 }) {
   const [open, setOpen] = React.useState(false)
+  const { data: session } = useSession()
+  const authDialog = useAuthDialog()
+
+  // The auth dialog can't open until the sheet has finished closing: the sheet
+  // restores focus to its trigger on close, which would yank focus straight
+  // back out of a dialog opened in the same tick.
+  const [queuedMode, setQueuedMode] = React.useState<AuthMode | null>(null)
+
+  function requestAuth(mode: AuthMode) {
+    setQueuedMode(mode)
+    setOpen(false)
+  }
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
+    <Sheet
+      open={open}
+      onOpenChange={setOpen}
+      onOpenChangeComplete={(isOpen) => {
+        if (isOpen || !queuedMode) return
+        authDialog.open(queuedMode)
+        setQueuedMode(null)
+      }}
+    >
       <SheetTrigger
         render={<Button variant="ghost" size="icon" className={className} />}
       >
@@ -67,18 +92,17 @@ function MobileNav({
             </SheetClose>
           ))}
         </nav>
-        <SheetFooter className="grid grid-cols-2">
-          <Button
-            variant="outline"
-            render={<Link href="/sign-in" />}
-            nativeButton={false}
-          >
-            Sign in
-          </Button>
-          <Button render={<Link href="/sign-up" />} nativeButton={false}>
-            Try Docsy free
-          </Button>
-        </SheetFooter>
+        {/* Signed in, the header avatar owns account actions — no duplicate. */}
+        {!session && (
+          <SheetFooter className="grid grid-cols-2">
+            <Button variant="outline" onClick={() => requestAuth("sign-in")}>
+              Sign in
+            </Button>
+            <Button onClick={() => requestAuth("sign-up")}>
+              Try Docsy free
+            </Button>
+          </SheetFooter>
+        )}
       </SheetContent>
     </Sheet>
   )

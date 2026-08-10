@@ -1,4 +1,3 @@
-import Link from "next/link"
 import { CheckIcon } from "lucide-react"
 
 import type { BillingPeriod, Plan } from "@/lib/pricing"
@@ -11,7 +10,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+import { AuthDialogTrigger } from "@/components/auth/auth-dialog-trigger"
 
 function PricingCard({
   plan,
@@ -29,7 +28,7 @@ function PricingCard({
       className={cn(
         // `overflow-visible` lets the "Most popular" badge straddle the border.
         "relative overflow-visible [--card-spacing:--spacing(7)]",
-        plan.highlighted && "shadow-xl shadow-brand/25 ring-2 ring-brand",
+        plan.highlighted && "shadow-xl ring-2 shadow-brand/25 ring-brand",
         className
       )}
     >
@@ -57,14 +56,13 @@ function PricingCard({
       </CardContent>
 
       <CardContent>
-        <Button
+        <AuthDialogTrigger
+          mode="sign-up"
           variant={plan.ctaVariant}
           className="h-10 w-full"
-          render={<Link href={plan.cta.href} />}
-          nativeButton={false}
         >
           {plan.cta.label}
-        </Button>
+        </AuthDialogTrigger>
       </CardContent>
 
       <CardContent>

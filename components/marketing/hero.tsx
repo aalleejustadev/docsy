@@ -3,6 +3,7 @@ import { ArrowRightIcon, CheckIcon, PlayIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { AuthDialogTrigger } from "@/components/auth/auth-dialog-trigger"
 import { HeroPreview } from "@/components/marketing/hero-preview"
 import { TrustedBy } from "@/components/marketing/trusted-by"
 
@@ -43,14 +44,10 @@ function Hero() {
           </p>
 
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
-            <Button
-              className={CTA_CLASSES}
-              render={<Link href="/sign-up" />}
-              nativeButton={false}
-            >
+            <AuthDialogTrigger mode="sign-up" className={CTA_CLASSES}>
               Try Docsy free
               <ArrowRightIcon data-icon="inline-end" />
-            </Button>
+            </AuthDialogTrigger>
             <Button
               variant="outline"
               className={CTA_CLASSES}

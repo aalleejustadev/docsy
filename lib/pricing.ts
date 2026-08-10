@@ -12,7 +12,8 @@ export type Plan = {
   description: string
   /** Dollars per month under each billing period. */
   price: Record<BillingPeriod, number>
-  cta: { label: string; href: string }
+  /** Every plan opens the sign-up dialog; only the wording differs. */
+  cta: { label: string }
   ctaVariant: "default" | "outline"
   features: PlanFeature[]
   /** Marks the plan as "Most popular" and gives it the brand treatment. */
@@ -28,7 +29,7 @@ export const PLANS: Plan[] = [
     name: "Free",
     description: "For trying it on a handful of files.",
     price: { monthly: 0, annual: 0 },
-    cta: { label: "Get started", href: "/sign-up" },
+    cta: { label: "Get started" },
     ctaVariant: "outline",
     features: [
       { label: "Up to 5 documents" },
@@ -42,7 +43,7 @@ export const PLANS: Plan[] = [
     name: "Pro",
     description: "For professionals living in documents.",
     price: { monthly: 19, annual: 15 },
-    cta: { label: "Try Docsy free", href: "/sign-up?plan=pro" },
+    cta: { label: "Try Docsy free" },
     ctaVariant: "default",
     highlighted: true,
     features: [
@@ -59,7 +60,7 @@ export const PLANS: Plan[] = [
     name: "Business",
     description: "For power users who never want to hit a limit.",
     price: { monthly: 49, annual: 39 },
-    cta: { label: "Get Business", href: "/sign-up?plan=business" },
+    cta: { label: "Get Business" },
     ctaVariant: "outline",
     features: [
       { label: "Everything in Pro, plus:" },

@@ -1,7 +1,7 @@
-import Link from "next/link"
 import { ArrowRightIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { AuthDialogTrigger } from "@/components/auth/auth-dialog-trigger"
 
 function FooterCta() {
   return (
@@ -25,14 +25,13 @@ function FooterCta() {
           </p>
 
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button
+            <AuthDialogTrigger
+              mode="sign-up"
               className="h-11 bg-brand px-5 text-base text-brand-foreground hover:bg-brand/90 has-data-[icon=inline-end]:pr-5"
-              render={<Link href="/sign-up" />}
-              nativeButton={false}
             >
               Try Docsy free
               <ArrowRightIcon data-icon="inline-end" />
-            </Button>
+            </AuthDialogTrigger>
             <Button variant="outline" className="h-11 px-5 text-base">
               Try the ⌘K search
             </Button>
