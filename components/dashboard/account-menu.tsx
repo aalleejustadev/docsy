@@ -83,7 +83,7 @@ function AccountMenu({
           <DropdownMenuItem
             key={item.href}
             render={<Link href={item.href} />}
-            className="gap-2.5 px-1.5 py-2"
+            className="cursor-pointer gap-2.5 px-1.5 py-2"
           >
             <item.icon />
             {item.label}
@@ -95,7 +95,7 @@ function AccountMenu({
         <DropdownMenuItem
           disabled={pending}
           onClick={handleSignOut}
-          className="gap-2.5 px-1.5 py-2"
+          className="cursor-pointer gap-2.5 px-1.5 py-2"
         >
           <LogOutIcon />
           Sign out

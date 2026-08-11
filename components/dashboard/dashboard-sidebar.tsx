@@ -14,7 +14,6 @@ import {
   APP_ROOT,
   dashboardNav,
   defaultPlanLabel,
-  defaultWorkspace,
   isDashboardNavItemActive,
   workspaceInitials,
 } from "@/lib/dashboard-nav"
@@ -49,7 +48,14 @@ const accountMenuItems = [
 ]
 
 /** Product navigation — `ui-design/dashboard/light/dashboard-sidebar.png`. */
-function DashboardSidebar({ user }: { user: SessionUser }) {
+function DashboardSidebar({
+  user,
+  workspaceName,
+}: {
+  user: SessionUser
+  /** The active organization's name, resolved by the workspace layout. */
+  workspaceName: string
+}) {
   const pathname = usePathname()
 
   return (
@@ -59,7 +65,7 @@ function DashboardSidebar({ user }: { user: SessionUser }) {
           <DocsyLogo />
         </Link>
 
-        <Button size="lg" className="w-full">
+        <Button size="lg" className="w-full cursor-pointer">
           <PlusIcon />
           New chat
         </Button>
@@ -68,10 +74,10 @@ function DashboardSidebar({ user }: { user: SessionUser }) {
       <SidebarContent className="gap-1">
         <div className="flex items-center gap-3 px-5 py-3">
           <span className="flex size-7 shrink-0 items-center justify-center rounded-md border text-[0.625rem] font-semibold tracking-wide">
-            {workspaceInitials(defaultWorkspace.name)}
+            {workspaceInitials(workspaceName)}
           </span>
           <span className="truncate text-sm font-semibold">
-            {defaultWorkspace.name}
+            {workspaceName}
           </span>
         </div>
 
@@ -127,7 +133,7 @@ function DashboardSidebar({ user }: { user: SessionUser }) {
               render={
                 <SidebarMenuButton
                   size="lg"
-                  className="gap-3"
+                  className="cursor-pointer gap-3"
                   aria-label="Account menu"
                 />
               }

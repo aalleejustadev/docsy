@@ -22,19 +22,37 @@ const accountMenuItems = [
 ]
 
 /** Chrome above the page — `ui-design/dashboard/light/dashboard-header.png`. */
-function DashboardHeader({ user }: { user: SessionUser }) {
+function DashboardHeader({
+  user,
+  title,
+  showSearch = true,
+  showSidebarTrigger = false,
+}: {
+  user: SessionUser
+  /** Overrides the route's own title, e.g. "Welcome" during onboarding. */
+  title?: string
+  showSearch?: boolean
+  /**
+   * Opt-in, because `SidebarTrigger` throws outside a `SidebarProvider` and
+   * only `(workspace)` has one. Forgetting it costs a mobile toggle; assuming
+   * it costs the whole page.
+   */
+  showSidebarTrigger?: boolean
+}) {
   const pathname = usePathname()
 
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b bg-background px-6">
-      <SidebarTrigger className="-ml-2 md:hidden" />
+      {showSidebarTrigger && (
+        <SidebarTrigger className="-ml-2 cursor-pointer md:hidden" />
+      )}
 
       <h1 className="text-base font-semibold">
-        {dashboardPageTitle(pathname)}
+        {title ?? dashboardPageTitle(pathname)}
       </h1>
 
       <div className="ml-auto flex items-center gap-2">
-        <SearchAskButton className="hidden sm:inline-flex" />
+        {showSearch && <SearchAskButton className="hidden sm:inline-flex" />}
         <ModeToggle className="size-9" />
 
         <AccountMenu
@@ -45,7 +63,7 @@ function DashboardHeader({ user }: { user: SessionUser }) {
             <Button
               variant="ghost"
               size="icon-lg"
-              className="rounded-full"
+              className="cursor-pointer rounded-full"
               aria-label="Account menu"
             />
           }

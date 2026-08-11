@@ -15,7 +15,7 @@ function SearchAskButton({ className }: { className?: string }) {
       variant="outline"
       size="lg"
       className={cn(
-        "w-64 justify-start gap-2.5 pr-1.5 pl-2.5 font-normal",
+        "w-64 cursor-pointer justify-start gap-2.5 pr-1.5 pl-2.5 font-normal",
         className
       )}
     >

@@ -12,6 +12,9 @@ import {
 /** Everything signed-in lives under `/app`, so links are built from this root. */
 export const APP_ROOT = "/app"
 
+/** The one route inside `/app` a user without a workspace can reach. */
+export const ONBOARDING_ROUTE = `${APP_ROOT}/onboarding`
+
 export type DashboardNavItem = {
   href: string
   label: string
@@ -86,12 +89,6 @@ export function dashboardPageTitle(pathname: string) {
 
   return match?.label ?? "Home"
 }
-
-/**
- * The workspace shown above the nav. Personal for now — it becomes the active
- * organisation once the org plugin is wired up.
- */
-export const defaultWorkspace = { name: "My workspace" }
 
 /** "Meridian Capital" → "MC", for the square badge beside the name. */
 export function workspaceInitials(name: string) {

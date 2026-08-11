@@ -14,7 +14,15 @@ function userInitials(user: Pick<SessionUser, "name" | "email">) {
     .join("")
 }
 
-/** The session user's photo, or their initials on the brand disc. */
+/**
+ * The session user's photo, or their initials on the brand disc.
+ *
+ * `user.image` is whatever the provider gave us at sign-up or account link —
+ * a Google `picture` or a GitHub `avatar_url` — so this is the same avatar
+ * everywhere: landing header, dashboard header, sidebar, account menu. The
+ * fallback covers both the email/password case (no photo at all) and an image
+ * URL that fails to load.
+ */
 function UserAvatar({
   user,
   className,
@@ -24,7 +32,14 @@ function UserAvatar({
 }) {
   return (
     <Avatar className={cn("shrink-0", className)} {...props}>
-      {user.image && <AvatarImage src={user.image} alt="" />}
+      {user.image && (
+        <AvatarImage
+          src={user.image}
+          alt=""
+          // Provider CDNs are hotlinked here; don't hand them our URLs.
+          referrerPolicy="no-referrer"
+        />
+      )}
       <AvatarFallback className="bg-brand font-medium text-brand-foreground">
         {userInitials(user)}
       </AvatarFallback>

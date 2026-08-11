@@ -33,7 +33,7 @@ export default async function AppHomePage() {
       <div className="mt-8 grid gap-4 sm:grid-cols-2">
         <button
           type="button"
-          className="flex items-center gap-4 rounded-xl border bg-card p-4 text-left transition-colors hover:bg-accent/50"
+          className="flex cursor-pointer items-center gap-4 rounded-xl border bg-card p-4 text-left transition-colors hover:bg-accent/50"
         >
           <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <PlusIcon className="size-5" />
@@ -48,7 +48,7 @@ export default async function AppHomePage() {
 
         <button
           type="button"
-          className="flex items-center gap-4 rounded-xl border border-dashed bg-surface p-4 text-left transition-colors hover:border-brand hover:bg-brand/5"
+          className="flex cursor-pointer items-center gap-4 rounded-xl border border-dashed bg-surface p-4 text-left transition-colors hover:border-brand hover:bg-brand/5"
         >
           <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-brand/15 text-brand">
             <UploadIcon className="size-5" />

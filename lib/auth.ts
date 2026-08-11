@@ -2,6 +2,7 @@ import { after } from "next/server"
 import { betterAuth } from "better-auth"
 import { prismaAdapter } from "better-auth/adapters/prisma"
 import { nextCookies } from "better-auth/next-js"
+import { organization } from "better-auth/plugins"
 
 import { configuredSocialProviders } from "@/lib/auth-providers"
 import { db } from "@/lib/db"
@@ -61,6 +62,11 @@ export const auth = betterAuth({
       // after signing up with GitHub lands on the same account instead of
       // silently creating a duplicate.
       trustedProviders: ["google", "github"],
+      // Copy the provider's name and picture onto the user when an account is
+      // linked, so someone who signed up with a password gets a real avatar
+      // the first time they continue with Google or GitHub. Email and
+      // emailVerified are never touched, so a link can't rebind the account.
+      updateUserInfoOnLink: true,
     },
   },
 
@@ -104,6 +110,14 @@ export const auth = betterAuth({
   },
 
   plugins: [
+    // A workspace is an organization: every signed-in user creates one before
+    // they reach the product, and the creator owns it. Invitations are not
+    // wired up yet — add `sendInvitationEmail` here when they are.
+    organization({
+      organizationLimit: 5,
+      membershipLimit: 100,
+    }),
+
     // Must stay last — it writes cookies set during server actions.
     nextCookies(),
   ],
