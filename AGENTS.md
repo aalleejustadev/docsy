@@ -28,6 +28,7 @@ components/
   marketing/            landing sections: hero, how-it-works, pricing, faqs, …
   auth/                 sign-in / sign-up dialogs, session avatar
   dashboard/            signed-in chrome: dashboard-sidebar, dashboard-header, account-menu
+    home/               one file per section of the /app home page
   onboarding/           first-run organization form + its setup loading state
   search/               search trigger + command palette
   theme/                theme-provider, mode-toggle
