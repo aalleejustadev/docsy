@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation"
 import { LogOutIcon } from "lucide-react"
 
 import { signOut, type SessionUser } from "@/lib/auth-client"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -14,17 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-
-function initials(user: SessionUser) {
-  const source = user.name?.trim() || user.email
-
-  return source
-    .split(/[\s@._-]+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("")
-}
+import { UserAvatar } from "@/components/auth/user-avatar"
 
 /** Signed-in state for the header: who you are, and the way out. */
 function UserMenu({ user }: { user: SessionUser }) {
@@ -50,10 +39,7 @@ function UserMenu({ user }: { user: SessionUser }) {
           />
         }
       >
-        <Avatar size="sm">
-          {user.image && <AvatarImage src={user.image} alt="" />}
-          <AvatarFallback>{initials(user)}</AvatarFallback>
-        </Avatar>
+        <UserAvatar user={user} size="sm" />
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="w-56">

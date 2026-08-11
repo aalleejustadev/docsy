@@ -15,12 +15,17 @@ app/
     page.tsx            "/" — composes landing sections
   (auth)/               full-page auth screens an email link must land on
     reset-password/     target of the password-reset link
+  app/                  "/app" — the signed-in product
+    layout.tsx          session guard + SidebarProvider + dashboard chrome
+    page.tsx            "/app" — dashboard home
   api/auth/[...all]/    Better Auth route handler
+proxy.ts                Next 16 middleware: optimistic cookie gate for /app
 components/
   ui/                   shadcn primitives — owned by the shadcn CLI, don't hand-edit
   layout/               page chrome: site-header, mobile-nav, site-footer
   marketing/            landing sections: hero, how-it-works, pricing, faqs, …
-  auth/                 sign-in / sign-up dialogs
+  auth/                 sign-in / sign-up dialogs, session avatar
+  dashboard/            signed-in chrome: dashboard-sidebar, dashboard-header, account-menu
   search/               search trigger + command palette
   theme/                theme-provider, mode-toggle
   brand/                logo mark and wordmark
@@ -32,6 +37,8 @@ lib/
   auth-providers.ts     social provider registry, env-gated
   db.ts                 Prisma client singleton (Neon driver adapter)
   email/                Resend transport + transactional templates
+  dashboard-nav.ts      /app nav groups, route→title lookup, workspace defaults
+  session.ts            server-side session helpers (cached, guards, redirects)
   site-config.ts        site metadata + navigation data
   utils.ts              cn()
 prisma/
@@ -47,7 +54,8 @@ Rules of thumb:
 
 - One landing section per file in `components/marketing/`, named after its reference screenshot (`ui-design/landing/light/2-hero.png` → `hero.tsx`). Sections are composed in `app/(marketing)/page.tsx`, not nested in each other.
 - Shared content (nav items, site name/description) lives in `lib/site-config.ts` so server and client components can both import it without pulling in a component module.
-- New routes get their own route group when they need different chrome (e.g. `app/(app)/` for the signed-in product).
+- New routes get their own route group when they need different chrome. The signed-in product is the `/app` segment instead — its own directory, so the URL prefix and the chrome are the same boundary.
+- Signed-in routing has two layers: `proxy.ts` bounces anyone without a session *cookie* off `/app` (no database hit), and `app/app/layout.tsx` verifies the session for real. Signed-in visitors are sent to `/app` from the landing page via `redirectIfSignedIn()`, and by the auth dialogs after a successful sign-in.
 - Auth is a modal, not a page. Any CTA that used to link to `/sign-up` renders `<AuthDialogTrigger mode="sign-up">` instead; `AuthDialogProvider` owns both dialogs and lives in the marketing layout so header and page share one instance. Only flows an email link has to land on get a real route.
 - Never import `lib/auth.ts` from a client component — it pulls the database in. Client code uses `lib/auth-client.ts`, which re-exports the same session types.
 - After changing auth options or plugins: `npm run auth:generate && npm run db:migrate`. The Better Auth CLI rewrites `schema.prisma` in Prisma 6 shape (no generator `output`, a `url` back in the datasource); `auth:generate` chains `scripts/sync-auth-schema.mjs` to put both back, so don't call the CLI directly.

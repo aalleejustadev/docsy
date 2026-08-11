@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 
 import { requestPasswordReset, signIn } from "@/lib/auth-client"
 import type { SocialProviderId } from "@/lib/auth-providers"
+import { APP_ROOT } from "@/lib/dashboard-nav"
 import {
   AuthDialogShell,
   AuthSwitchButton,
@@ -42,7 +43,7 @@ function SignInDialog({
   onOpenChange,
   onSwitchToSignUp,
   socialProviders = [],
-  callbackURL = "/",
+  callbackURL = APP_ROOT,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -79,7 +80,7 @@ function SignInDialog({
     setError(null)
 
     // No `callbackURL` here on purpose — passing one makes the client redirect
-    // itself, and we want to close the dialog and refresh in place instead.
+    // itself, and we want to close the dialog before navigating.
     const { error: signInError } = await signIn.email({
       email: String(form.get("email")),
       password: String(form.get("password")),
@@ -93,7 +94,7 @@ function SignInDialog({
     }
 
     handleOpenChange(false)
-    router.refresh()
+    router.push(APP_ROOT)
   }
 
   async function handleForgotPassword(event: React.FormEvent<HTMLFormElement>) {

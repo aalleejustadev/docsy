@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 
 import { signUp } from "@/lib/auth-client"
 import type { SocialProviderId } from "@/lib/auth-providers"
+import { APP_ROOT } from "@/lib/dashboard-nav"
 import {
   AuthDialogShell,
   AuthSwitchButton,
@@ -24,7 +25,7 @@ function SignUpDialog({
   onOpenChange,
   onSwitchToSignIn,
   socialProviders = [],
-  callbackURL = "/",
+  callbackURL = APP_ROOT,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -50,7 +51,7 @@ function SignUpDialog({
     setPending(true)
     setError(null)
 
-    const { error: signUpError } = await signUp.email({
+    const { data, error: signUpError } = await signUp.email({
       name: String(form.get("name")),
       email: String(form.get("email")),
       password: String(form.get("password")),
@@ -64,10 +65,16 @@ function SignUpDialog({
       return
     }
 
-    // Sign-up establishes the session, so refresh to let server components
-    // pick it up rather than navigating away from the landing page.
     handleOpenChange(false)
-    router.refresh()
+
+    // A token means sign-up established a session, so go straight to the app.
+    // Without one, verification is still pending — stay put and let server
+    // components pick up whatever state we do have.
+    if (data?.token) {
+      router.push(APP_ROOT)
+    } else {
+      router.refresh()
+    }
   }
 
   return (

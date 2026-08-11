@@ -1,3 +1,4 @@
+import { redirectIfSignedIn } from "@/lib/session"
 import { EverythingInOneWorkspace } from "@/components/marketing/everything-in-one-workspace"
 import { Faqs } from "@/components/marketing/faqs"
 import { FooterCta } from "@/components/marketing/footer-cta"
@@ -8,7 +9,10 @@ import { Privacy } from "@/components/marketing/privacy"
 import { Stats } from "@/components/marketing/stats"
 import { Testimonials } from "@/components/marketing/testimonials"
 
-export default function Page() {
+export default async function Page() {
+  // The landing page is for visitors — anyone with a session belongs in /app.
+  await redirectIfSignedIn()
+
   return (
     <>
       <Hero />
