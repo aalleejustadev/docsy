@@ -6,7 +6,11 @@ import { organization } from "better-auth/plugins"
 
 import { configuredSocialProviders } from "@/lib/auth-providers"
 import { db } from "@/lib/db"
-import { sendPasswordResetEmail, sendVerificationEmail } from "@/lib/email"
+import {
+  sendChangeEmailVerification,
+  sendPasswordResetEmail,
+  sendVerificationEmail,
+} from "@/lib/email"
 import { siteConfig } from "@/lib/site-config"
 
 const isProduction = process.env.NODE_ENV === "production"
@@ -42,11 +46,37 @@ export const auth = betterAuth({
     },
   },
 
+  user: {
+    changeEmail: {
+      enabled: true,
+      // No `sendChangeEmailConfirmation` on purpose. Configuring it turns the
+      // change into two hops — approve at the old address, then verify at the
+      // new one. Leaving it off drops Better Auth into the single-hop branch:
+      // the link goes straight to the new address, and opening it writes the
+      // new email and refreshes the session.
+    },
+  },
+
   emailVerification: {
     sendOnSignUp: true,
     autoSignInAfterVerification: true,
     expiresIn: 60 * 60,
     sendVerificationEmail: async ({ user, url }) => {
+      // This one callback covers both "confirm your address after sign-up" and
+      // "confirm the address you're moving to". Better Auth passes the *new*
+      // address on a change while the row still holds the old one, so that
+      // mismatch is what tells the two apart — and it gives us the previous
+      // address to name in the copy.
+      const stored = await db.user.findUnique({
+        where: { id: user.id },
+        select: { email: true },
+      })
+
+      if (stored && stored.email !== user.email) {
+        await sendChangeEmailVerification(user.email, stored.email, url)
+        return
+      }
+
       await sendVerificationEmail(user.email, url)
     },
   },

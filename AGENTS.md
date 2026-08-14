@@ -19,8 +19,10 @@ app/
     layout.tsx          session guard only; chrome lives one level down
     (workspace)/        needs an organization: sidebar + header chrome
       page.tsx          "/app" — dashboard home
+      settings/         layout.tsx holds the tab strip; one route per tab
     onboarding/         "/app/onboarding" — name your organization, bare header
   api/auth/[...all]/    Better Auth route handler
+  api/avatar/           profile pictures: POST/DELETE here, GET [userId]
 proxy.ts                Next 16 middleware: optimistic cookie gate for /app
 components/
   ui/                   shadcn primitives — owned by the shadcn CLI, don't hand-edit
@@ -29,6 +31,7 @@ components/
   auth/                 sign-in / sign-up dialogs, session avatar
   dashboard/            signed-in chrome: dashboard-sidebar, dashboard-header, account-menu
     home/               one file per section of the /app home page
+    settings/           tab strip + one file per settings tab
   onboarding/           first-run organization form + its setup loading state
   search/               search trigger + command palette
   theme/                theme-provider, mode-toggle
@@ -39,6 +42,7 @@ lib/
   auth.ts               Better Auth server config — the CLI reads this file
   auth-client.ts        Better Auth React client + inferred session types
   auth-providers.ts     social provider registry, env-gated
+  avatar.ts             avatar limits, magic-byte sniffing, URL builder
   db.ts                 Prisma client singleton (Neon driver adapter)
   email/                Resend transport + transactional templates
   dashboard-nav.ts      /app nav groups, route→title lookup, workspace helpers
@@ -64,5 +68,7 @@ Rules of thumb:
 - A workspace *is* a Better Auth organization. Everything under `app/app/(workspace)/` calls `requireOrganization()` and bounces to `/app/onboarding` when the user has none; onboarding bounces back once they do. Guards are `lib/session.ts` helpers, never inline `auth.api` calls in a page.
 - Auth is a modal, not a page. Any CTA that used to link to `/sign-up` renders `<AuthDialogTrigger mode="sign-up">` instead; `AuthDialogProvider` owns both dialogs and lives in the marketing layout so header and page share one instance. Only flows an email link has to land on get a real route.
 - Never import `lib/auth.ts` from a client component — it pulls the database in. Client code uses `lib/auth-client.ts`, which re-exports the same session types.
+- `Avatar` is the one model in `schema.prisma` Better Auth doesn't own — profile pictures are bytes in Postgres, served by `app/api/avatar/[userId]`, with `user.image` holding that URL. The CLI leaves it alone when it regenerates, but check it's still there after `auth:generate`.
+- Restart `npm run dev` after any `db:generate`. `lib/db.ts` caches the client on `globalThis` in dev, so a running server keeps the client it started with and new models come back `undefined`.
 - After changing auth options or plugins: `npm run auth:generate && npm run db:migrate`. The Better Auth CLI rewrites `schema.prisma` in Prisma 6 shape (no generator `output`, a `url` back in the datasource); `auth:generate` chains `scripts/sync-auth-schema.mjs` to put both back, so don't call the CLI directly.
 - Migrations need the *direct* Neon URL. `prisma.config.ts` reads `DATABASE_URL_UNPOOLED` (what `neon env pull` writes) before `DIRECT_URL`, and warns if it ends up on a `-pooler` host.

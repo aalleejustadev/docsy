@@ -12,9 +12,11 @@ import {
 import type { SessionUser } from "@/lib/auth-client"
 import {
   APP_ROOT,
+  BILLING_ROUTE,
   dashboardNav,
   defaultPlanLabel,
   isDashboardNavItemActive,
+  SETTINGS_ROUTE,
   workspaceInitials,
 } from "@/lib/dashboard-nav"
 import { Badge } from "@/components/ui/badge"
@@ -31,6 +33,9 @@ import {
   SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarRail,
 } from "@/components/ui/sidebar"
 import { UserAvatar } from "@/components/auth/user-avatar"
@@ -39,12 +44,8 @@ import { AccountMenu } from "@/components/dashboard/account-menu"
 
 /** Links above "Sign out" in the footer menu. */
 const accountMenuItems = [
-  { href: `${APP_ROOT}/settings/account`, label: "Account", icon: UserIcon },
-  {
-    href: `${APP_ROOT}/settings/billing`,
-    label: "Billing",
-    icon: CreditCardIcon,
-  },
+  { href: SETTINGS_ROUTE, label: "Account", icon: UserIcon },
+  { href: BILLING_ROUTE, label: "Billing", icon: CreditCardIcon },
 ]
 
 /** Product navigation — `ui-design/dashboard/light/dashboard-sidebar.png`. */
@@ -91,30 +92,52 @@ function DashboardSidebar({
 
             <SidebarGroupContent>
               <SidebarMenu className="gap-1">
-                {group.items.map((item) => (
-                  <SidebarMenuItem key={item.href}>
-                    <SidebarMenuButton
-                      render={<Link href={item.href} />}
-                      isActive={isDashboardNavItemActive(item, pathname)}
-                      className="h-9 gap-3 px-2.5 text-muted-foreground data-active:text-sidebar-accent-foreground"
-                    >
-                      <item.icon />
-                      <span>{item.label}</span>
-                    </SidebarMenuButton>
+                {group.items.map((item) => {
+                  const isActive = isDashboardNavItemActive(item, pathname)
 
-                    {item.count && (
-                      <SidebarMenuBadge className="top-2 right-2 text-muted-foreground">
-                        {item.count}
-                      </SidebarMenuBadge>
-                    )}
+                  return (
+                    <SidebarMenuItem key={item.href}>
+                      <SidebarMenuButton
+                        render={<Link href={item.href} />}
+                        isActive={isActive}
+                        className="h-9 gap-3 px-2.5 text-muted-foreground data-active:text-sidebar-accent-foreground"
+                      >
+                        <item.icon />
+                        <span>{item.label}</span>
+                      </SidebarMenuButton>
 
-                    {item.tag && (
-                      <Badge className="pointer-events-none absolute top-2 right-2 bg-brand/15 text-[0.625rem] font-bold tracking-wider text-brand uppercase group-data-[collapsible=icon]:hidden">
-                        {item.tag}
-                      </Badge>
-                    )}
-                  </SidebarMenuItem>
-                ))}
+                      {item.count && (
+                        <SidebarMenuBadge className="top-2 right-2 text-muted-foreground">
+                          {item.count}
+                        </SidebarMenuBadge>
+                      )}
+
+                      {item.tag && (
+                        <Badge className="pointer-events-none absolute top-2 right-2 bg-brand/15 text-[0.625rem] font-bold tracking-wider text-brand uppercase group-data-[collapsible=icon]:hidden">
+                          {item.tag}
+                        </Badge>
+                      )}
+
+                      {/* Sub-links only while you're in that section — the
+                        sidebar reference shows none at rest. */}
+                      {item.items && isActive && (
+                        <SidebarMenuSub className="my-1 gap-0.5">
+                          {item.items.map((subItem) => (
+                            <SidebarMenuSubItem key={subItem.href}>
+                              <SidebarMenuSubButton
+                                render={<Link href={subItem.href} />}
+                                isActive={pathname === subItem.href}
+                                className="text-muted-foreground data-active:font-medium"
+                              >
+                                <span>{subItem.label}</span>
+                              </SidebarMenuSubButton>
+                            </SidebarMenuSubItem>
+                          ))}
+                        </SidebarMenuSub>
+                      )}
+                    </SidebarMenuItem>
+                  )
+                })}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>

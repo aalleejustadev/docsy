@@ -1,6 +1,6 @@
 import Link from "next/link"
 
-import { APP_ROOT } from "@/lib/dashboard-nav"
+import { BILLING_ROUTE } from "@/lib/dashboard-nav"
 import { cn } from "@/lib/utils"
 import { Progress } from "@/components/ui/progress"
 
@@ -80,7 +80,7 @@ function HomeStats() {
         <span className="flex items-center gap-3">
           <span className="text-3xl font-bold tracking-tight">{PLAN}</span>
           <Link
-            href={`${APP_ROOT}/settings/billing`}
+            href={BILLING_ROUTE}
             className="rounded-md bg-brand/15 px-2 py-1 text-xs font-medium text-brand transition-colors hover:bg-brand/25"
           >
             Manage

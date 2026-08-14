@@ -134,3 +134,15 @@ model Invitation {
   @@index([email])
   @@map("invitation")
 }
+
+/// Not a Better Auth model. Profile pictures live in Postgres and are served
+/// by `app/api/avatar/[userId]`; `user.image` holds that URL.
+model Avatar {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  contentType String
+  data        Bytes
+  updatedAt   DateTime @updatedAt
+
+  @@map("avatar")
+}

@@ -4,8 +4,8 @@ import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
-import { resetPassword } from "@/lib/auth-client"
-import { Button } from "@/components/ui/button"
+import { resetPassword, signOut } from "@/lib/auth-client"
+import { AuthDialogTrigger } from "@/components/auth/auth-dialog-trigger"
 import { authErrorMessage } from "@/components/auth/auth-errors"
 import {
   AuthField,
@@ -38,30 +38,39 @@ function ResetPasswordForm({ token }: { token: string }) {
       token,
     })
 
-    setPending(false)
-
     if (resetError) {
+      setPending(false)
       setError(authErrorMessage(resetError, "Could not reset your password."))
       return
     }
 
+    // The reset deletes every session row server-side, but this browser is
+    // still holding its own cookie — and the session data cached inside it
+    // answers "signed in" without ever consulting the database. Signing out
+    // clears both cookies, which is what makes the promise below true here.
+    await signOut()
+
+    setPending(false)
     setDone(true)
+    router.refresh()
   }
 
   if (done) {
     return (
       <div className="flex flex-col gap-5 text-center">
         <p className="text-sm leading-relaxed text-muted-foreground">
-          Your password is updated and every other session has been signed out.
+          Your password is updated and every session has been signed out — other
+          devices within a few minutes. Sign in again with your new password.
         </p>
-        <Button
-          className="h-11 w-full"
-          render={<Link href="/" />}
-          nativeButton={false}
-          onClick={() => router.refresh()}
+        <AuthDialogTrigger mode="sign-in" className="h-11 w-full">
+          Sign in
+        </AuthDialogTrigger>
+        <Link
+          href="/"
+          className="text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
         >
           Back to Docsy
-        </Button>
+        </Link>
       </div>
     )
   }

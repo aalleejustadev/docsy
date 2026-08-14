@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import { Resend } from "resend"
 
 import {
+  changeEmailVerificationEmail,
   passwordResetEmail,
   verificationEmail,
   type EmailContent,
@@ -98,6 +99,19 @@ export function sendVerificationEmail(to: string, url: string) {
     to,
     content: verificationEmail(url),
     idempotencyKey: idempotencyKeyFor("email-verification", url),
+  })
+}
+
+/** `to` is the new address; `previousEmail` is the one it replaces. */
+export function sendChangeEmailVerification(
+  to: string,
+  previousEmail: string,
+  url: string
+) {
+  return send({
+    to,
+    content: changeEmailVerificationEmail(previousEmail, url),
+    idempotencyKey: idempotencyKeyFor("change-email", url),
   })
 }
 

@@ -4,9 +4,10 @@ import { Geist, Geist_Mono } from "next/font/google"
 import "./globals.css"
 import { siteConfig } from "@/lib/site-config"
 import { cn } from "@/lib/utils"
+import { Toaster } from "@/components/ui/toast"
 import { ThemeProvider } from "@/components/theme/theme-provider"
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'})
+const geist = Geist({ subsets: ["latin"], variable: "--font-sans" })
 
 const fontMono = Geist_Mono({
   subsets: ["latin"],
@@ -30,10 +31,19 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={cn("antialiased", fontMono.variable, "font-sans", geist.variable)}
+      className={cn(
+        "antialiased",
+        fontMono.variable,
+        "font-sans",
+        geist.variable
+      )}
     >
       <body className="min-h-svh bg-background text-foreground">
-        <ThemeProvider>{children}</ThemeProvider>
+        {/* One toast manager for the whole app — `toast` from
+            `components/ui/toast` posts to this viewport from anywhere. */}
+        <ThemeProvider>
+          <Toaster>{children}</Toaster>
+        </ThemeProvider>
       </body>
     </html>
   )

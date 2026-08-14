@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils"
+import { SpinnerRing } from "@/components/common/spinner-ring"
 
 /**
  * Fills the pane while the workspace is being created —
@@ -19,10 +20,9 @@ function OrganizationSetupLoading({
         className
       )}
     >
-      <span
-        role="status"
+      <SpinnerRing
         aria-label={`Setting up ${name}`}
-        className="size-8 animate-spin rounded-full border-2 border-muted border-t-brand"
+        className="size-8 border-muted border-t-brand"
       />
       <p className="text-muted-foreground">Setting up {name}…</p>
     </div>

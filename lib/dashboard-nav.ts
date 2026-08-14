@@ -15,6 +15,19 @@ export const APP_ROOT = "/app"
 /** The one route inside `/app` a user without a workspace can reach. */
 export const ONBOARDING_ROUTE = `${APP_ROOT}/onboarding`
 
+/**
+ * Settings is one screen with three tabs, but each tab is its own route — the
+ * tab strip is navigation, so it survives a reload and can be linked to.
+ */
+export const SETTINGS_ROUTE = `${APP_ROOT}/settings`
+export const BILLING_ROUTE = `${SETTINGS_ROUTE}/billing`
+export const DANGER_ZONE_ROUTE = `${SETTINGS_ROUTE}/danger-zone`
+
+export type DashboardNavSubItem = {
+  href: string
+  label: string
+}
+
 export type DashboardNavItem = {
   href: string
   label: string
@@ -23,6 +36,8 @@ export type DashboardNavItem = {
   count?: string
   /** Right-aligned pill, e.g. the owner role on Admin. */
   tag?: string
+  /** Nested links, revealed while the section is open. */
+  items?: DashboardNavSubItem[]
 }
 
 export type DashboardNavGroup = {
@@ -55,7 +70,17 @@ export const dashboardNav: DashboardNavGroup[] = [
     title: "Manage",
     items: [
       { href: `${APP_ROOT}/usage`, label: "Usage", icon: ChartLineIcon },
-      { href: `${APP_ROOT}/settings`, label: "Settings", icon: SettingsIcon },
+      {
+        href: SETTINGS_ROUTE,
+        label: "Settings",
+        icon: SettingsIcon,
+        // "Danger zone" is a tab but not a nav entry — it isn't somewhere you
+        // navigate to on purpose.
+        items: [
+          { href: SETTINGS_ROUTE, label: "Account" },
+          { href: BILLING_ROUTE, label: "Billing" },
+        ],
+      },
       {
         href: `${APP_ROOT}/admin`,
         label: "Admin",

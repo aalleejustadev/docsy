@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation"
 import { SettingsIcon } from "lucide-react"
 
 import type { SessionUser } from "@/lib/auth-client"
-import { APP_ROOT, dashboardPageTitle } from "@/lib/dashboard-nav"
+import { dashboardPageTitle, SETTINGS_ROUTE } from "@/lib/dashboard-nav"
 import { Button } from "@/components/ui/button"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { UserAvatar } from "@/components/auth/user-avatar"
@@ -14,11 +14,7 @@ import { ModeToggle } from "@/components/theme/mode-toggle"
 
 /** Links above "Sign out" in the header menu. */
 const accountMenuItems = [
-  {
-    href: `${APP_ROOT}/settings/account`,
-    label: "Manage account",
-    icon: SettingsIcon,
-  },
+  { href: SETTINGS_ROUTE, label: "Manage account", icon: SettingsIcon },
 ]
 
 /** Chrome above the page — `ui-design/dashboard/light/dashboard-header.png`. */

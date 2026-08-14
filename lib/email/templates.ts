@@ -83,6 +83,33 @@ export function verificationEmail(url: string): EmailContent {
   }
 }
 
+/**
+ * Sent to the address someone is moving their account *to* — opening the link
+ * is what proves they hold that mailbox, and only then does the change land.
+ */
+export function changeEmailVerificationEmail(
+  previousEmail: string,
+  url: string
+): EmailContent {
+  const heading = "Confirm your new email address"
+  const body = `Confirm this address to use it for your ${siteConfig.name} account. It replaces ${previousEmail} as your sign-in.`
+  const footnote =
+    "This link expires in 1 hour. If you didn't ask for this, ignore this email — the address on the account stays as it is."
+
+  return {
+    subject: `Confirm your new email for ${siteConfig.name}`,
+    html: layout({
+      preheader: "This link expires in 1 hour.",
+      heading,
+      body,
+      action: "Confirm email",
+      url,
+      footnote,
+    }),
+    text: `${heading}\n\n${body}\n\n${url}\n\n${footnote}`,
+  }
+}
+
 export function passwordResetEmail(url: string): EmailContent {
   const heading = "Reset your password"
   const body = `We received a request to reset the password on your ${siteConfig.name} account.`
