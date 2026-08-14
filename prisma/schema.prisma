@@ -146,3 +146,94 @@ model Avatar {
 
   @@map("avatar")
 }
+
+/// Not a Better Auth model. Uploaded sources live in Postgres beside the text
+/// Claude reads. Like `Avatar`, these carry plain `userId`/`organizationId`
+/// columns rather than relations, so `auth:generate` can rewrite the models
+/// above without needing to know about them.
+model Document {
+  id             String         @id @default(cuid())
+  organizationId String
+  userId         String
+  name           String
+  contentType    String
+  sizeBytes      Int
+  /// Pages for a PDF; null for formats without pagination.
+  pageCount      Int?
+  /// The original upload, kept so it can be served back and re-read later.
+  data           Bytes
+  /// Extracted plain text. Null for PDFs, which go to Claude as-is so it sees
+  /// the layout rather than a flattened transcription.
+  text           String?
+  status         DocumentStatus @default(PROCESSING)
+  failureReason  String?
+  createdAt      DateTime       @default(now())
+  chats          ChatDocument[]
+
+  @@index([organizationId, createdAt])
+  @@map("document")
+}
+
+enum DocumentStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+model Chat {
+  id             String         @id @default(cuid())
+  organizationId String
+  userId         String
+  title          String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  documents      ChatDocument[]
+  messages       Message[]
+
+  @@index([organizationId, updatedAt])
+  @@map("chat")
+}
+
+/// Join row. `position` is the citation index — the `[n]` markers in an answer
+/// resolve through it.
+model ChatDocument {
+  chatId     String
+  documentId String
+  position   Int
+  chat       Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@id([chatId, documentId])
+  @@index([documentId])
+  @@map("chatDocument")
+}
+
+model Message {
+  id        String           @id @default(cuid())
+  chatId    String
+  chat      Chat             @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  role      MessageRole
+  content   String
+  /// Citations Claude returned, resolved to `{ index, document, page }`.
+  sources   Json?
+  /// The seeded brief-analysis request: sent to Claude for context, never
+  /// rendered in the thread.
+  hidden    Boolean          @default(false)
+  /// Was this answer useful? Null until someone says. Only ever set on an
+  /// ASSISTANT row.
+  feedback  MessageFeedback?
+  createdAt DateTime         @default(now())
+
+  @@index([chatId, createdAt])
+  @@map("message")
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+}
+
+enum MessageFeedback {
+  UP
+  DOWN
+}

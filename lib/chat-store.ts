@@ -1,0 +1,269 @@
+import { db } from "@/lib/db"
+import type {
+  ChatDetail,
+  ChatMessageView,
+  ChatSource,
+  ChatSummary,
+  LibraryDocumentView,
+  MessageFeedbackView,
+} from "@/lib/chat"
+import { documentMeta, type DocumentPayload } from "@/lib/documents"
+
+/**
+ * Chat and document reads/writes. Server-only.
+ *
+ * Every query is scoped by `organizationId` — a workspace is the tenancy
+ * boundary, so a chat id alone must never be enough to read someone else's
+ * documents.
+ */
+
+/** Sidebar history, newest conversation first. */
+export async function listChats(
+  organizationId: string
+): Promise<ChatSummary[]> {
+  const chats = await db.chat.findMany({
+    where: { organizationId },
+    orderBy: { updatedAt: "desc" },
+    take: 50,
+    select: {
+      id: true,
+      title: true,
+      updatedAt: true,
+      messages: {
+        where: { role: "ASSISTANT" },
+        orderBy: { createdAt: "desc" },
+        take: 1,
+        select: { content: true },
+      },
+    },
+  })
+
+  return chats.map((chat) => ({
+    id: chat.id,
+    title: chat.title,
+    updatedAt: chat.updatedAt.toISOString(),
+    preview: chat.messages[0]?.content.slice(0, 140) ?? null,
+  }))
+}
+
+/** Everything the library picker shows, newest upload first. */
+export async function listLibraryDocuments(
+  organizationId: string
+): Promise<LibraryDocumentView[]> {
+  const documents = await db.document.findMany({
+    where: { organizationId },
+    orderBy: { createdAt: "desc" },
+    // Deliberately excludes `data` and `text`: the picker only needs labels,
+    // and selecting the bytes would pull every upload into memory.
+    select: {
+      id: true,
+      name: true,
+      sizeBytes: true,
+      pageCount: true,
+      contentType: true,
+      status: true,
+    },
+  })
+
+  return documents.map((document) => ({
+    id: document.id,
+    name: document.name,
+    meta: documentMeta(document.sizeBytes, document.pageCount),
+    format: document.name.split(".").pop()?.toUpperCase() ?? "FILE",
+    status: document.status,
+  }))
+}
+
+function toMessageView(message: {
+  id: string
+  role: "USER" | "ASSISTANT"
+  content: string
+  sources: unknown
+  feedback: MessageFeedbackView
+}): ChatMessageView {
+  return {
+    id: message.id,
+    role: message.role === "USER" ? "user" : "assistant",
+    content: message.content,
+    sources: (message.sources as ChatSource[] | null) ?? [],
+    feedback: message.feedback,
+  }
+}
+
+/** One chat with its visible thread, or null when it isn't this workspace's. */
+export async function getChat(
+  chatId: string,
+  organizationId: string
+): Promise<ChatDetail | null> {
+  const chat = await db.chat.findFirst({
+    where: { id: chatId, organizationId },
+    select: {
+      id: true,
+      title: true,
+      _count: { select: { documents: true } },
+      messages: {
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          role: true,
+          content: true,
+          sources: true,
+          hidden: true,
+          feedback: true,
+        },
+      },
+    },
+  })
+
+  if (!chat) return null
+
+  const last = chat.messages.at(-1)
+
+  return {
+    id: chat.id,
+    title: chat.title,
+    documentCount: chat._count.documents,
+    questionsUsed: chat.messages.filter(
+      (message) => message.role === "USER" && !message.hidden
+    ).length,
+    // The seeded analysis request is context for Claude, not part of the thread.
+    messages: chat.messages
+      .filter((message) => !message.hidden)
+      .map(toMessageView),
+    // A trailing user turn means its answer never landed — either the seeded
+    // analysis, or a follow-up interrupted by a reload.
+    pendingAnswer: last?.role === "USER",
+  }
+}
+
+/** The documents behind a chat, in citation order, with their bytes. */
+export async function getChatDocuments(
+  chatId: string
+): Promise<DocumentPayload[]> {
+  const links = await db.chatDocument.findMany({
+    where: { chatId },
+    orderBy: { position: "asc" },
+    select: {
+      document: {
+        select: { name: true, contentType: true, data: true, text: true },
+      },
+    },
+  })
+
+  return links.map((link) => link.document)
+}
+
+/** The full turn history Claude needs, seeded analysis request included. */
+export async function getChatHistory(chatId: string) {
+  const messages = await db.message.findMany({
+    where: { chatId },
+    orderBy: { createdAt: "asc" },
+    select: { role: true, content: true },
+  })
+
+  return messages
+}
+
+/**
+ * Opens a chat around one or more documents and seeds the brief-analysis
+ * request. The request is stored hidden: Claude needs it as the opening user
+ * turn, but showing it would put words in the developer's mouth.
+ */
+export async function createChat({
+  organizationId,
+  userId,
+  documentIds,
+  title,
+  seedPrompt,
+}: {
+  organizationId: string
+  userId: string
+  documentIds: string[]
+  title: string
+  seedPrompt: string
+}) {
+  return db.chat.create({
+    data: {
+      organizationId,
+      userId,
+      title,
+      documents: {
+        create: documentIds.map((documentId, position) => ({
+          documentId,
+          position,
+        })),
+      },
+      messages: {
+        create: { role: "USER", content: seedPrompt, hidden: true },
+      },
+    },
+    select: { id: true },
+  })
+}
+
+/** Confirms every id belongs to this workspace and is ready to be read. */
+export async function readyDocumentIds(
+  documentIds: string[],
+  organizationId: string
+) {
+  const documents = await db.document.findMany({
+    where: { id: { in: documentIds }, organizationId, status: "READY" },
+    select: { id: true, name: true },
+  })
+
+  return documents
+}
+
+export async function addMessage({
+  chatId,
+  role,
+  content,
+  sources,
+}: {
+  chatId: string
+  role: "USER" | "ASSISTANT"
+  content: string
+  sources?: ChatSource[]
+}) {
+  const message = await db.message.create({
+    data: { chatId, role, content, sources: sources ?? undefined },
+    select: { id: true },
+  })
+
+  // Bump the chat so the sidebar's newest-first ordering stays honest.
+  await db.chat.update({
+    where: { id: chatId },
+    data: { updatedAt: new Date() },
+  })
+
+  return message
+}
+
+/**
+ * Records — or clears — how useful an answer was.
+ *
+ * Scoped through the chat's workspace, so a message id from another tenant
+ * updates nothing rather than being trusted because it was well-formed.
+ */
+export async function setMessageFeedback({
+  messageId,
+  chatId,
+  organizationId,
+  feedback,
+}: {
+  messageId: string
+  chatId: string
+  organizationId: string
+  feedback: MessageFeedbackView
+}) {
+  const result = await db.message.updateMany({
+    where: {
+      id: messageId,
+      role: "ASSISTANT",
+      chat: { id: chatId, organizationId },
+    },
+    data: { feedback },
+  })
+
+  return result.count > 0
+}

@@ -3,7 +3,7 @@
 import * as React from "react"
 import { FileTextIcon } from "lucide-react"
 
-import { libraryDocuments, type LibraryDocument } from "@/lib/library"
+import type { LibraryDocumentView } from "@/lib/chat"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -31,11 +31,14 @@ function LibraryPickerDialog({
   open,
   onOpenChange,
   onAdd,
+  documents,
   addedIds,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
-  onAdd: (documents: LibraryDocument[]) => void
+  onAdd: (documents: LibraryDocumentView[]) => void
+  /** Everything this workspace has uploaded, newest first. */
+  documents: LibraryDocumentView[]
   /** Already in this chat — shown checked-off rather than offered again. */
   addedIds: string[]
 }) {
@@ -55,7 +58,7 @@ function LibraryPickerDialog({
   }
 
   function add() {
-    onAdd(libraryDocuments.filter((document) => selected.includes(document.id)))
+    onAdd(documents.filter((document) => selected.includes(document.id)))
     close()
   }
 
@@ -82,57 +85,67 @@ function LibraryPickerDialog({
         <CommandList className="max-h-96">
           <CommandEmpty>No documents match that search.</CommandEmpty>
 
-          <CommandGroup
-            heading={`Library · ${libraryDocuments.length} documents`}
-            className="p-0 **:[[cmdk-group-heading]]:px-4 **:[[cmdk-group-heading]]:pt-4 **:[[cmdk-group-heading]]:pb-2 **:[[cmdk-group-heading]]:text-[0.6875rem] **:[[cmdk-group-heading]]:font-bold **:[[cmdk-group-heading]]:tracking-[0.08em] **:[[cmdk-group-heading]]:uppercase"
-          >
-            {libraryDocuments.map((document) => {
-              const added = addedIds.includes(document.id)
-              const status = document.indexing
-                ? "indexing…"
-                : added
-                  ? "added"
-                  : null
+          {documents.length === 0 ? (
+            <p className="px-4 py-10 text-center text-sm text-muted-foreground">
+              Your library is empty. Upload a document and it will show up here
+              for every chat after this one.
+            </p>
+          ) : (
+            <CommandGroup
+              heading={`Library · ${documents.length} ${documents.length === 1 ? "document" : "documents"}`}
+              className="p-0 **:[[cmdk-group-heading]]:px-4 **:[[cmdk-group-heading]]:pt-4 **:[[cmdk-group-heading]]:pb-2 **:[[cmdk-group-heading]]:text-[0.6875rem] **:[[cmdk-group-heading]]:font-bold **:[[cmdk-group-heading]]:tracking-[0.08em] **:[[cmdk-group-heading]]:uppercase"
+            >
+              {documents.map((document) => {
+                const added = addedIds.includes(document.id)
+                const unusable = document.status !== "READY"
+                const status = unusable
+                  ? document.status === "PROCESSING"
+                    ? "indexing…"
+                    : "unreadable"
+                  : added
+                    ? "added"
+                    : null
 
-              return (
-                <CommandItem
-                  key={document.id}
-                  value={`${document.name} ${document.format}`}
-                  disabled={document.indexing || added}
-                  onSelect={() => toggle(document.id)}
-                  className="cursor-pointer gap-3 rounded-none! px-4 py-3"
-                >
-                  <Checkbox
-                    checked={added || selected.includes(document.id)}
-                    className="pointer-events-none"
-                  />
+                return (
+                  <CommandItem
+                    key={document.id}
+                    value={`${document.name} ${document.format}`}
+                    disabled={unusable || added}
+                    onSelect={() => toggle(document.id)}
+                    className="cursor-pointer gap-3 rounded-none! px-4 py-3"
+                  >
+                    <Checkbox
+                      checked={added || selected.includes(document.id)}
+                      className="pointer-events-none"
+                    />
 
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border bg-surface text-muted-foreground">
-                    <FileTextIcon />
-                  </span>
-
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate font-semibold">
-                      {document.name}
+                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border bg-surface text-muted-foreground">
+                      <FileTextIcon />
                     </span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {document.meta}
-                    </span>
-                  </span>
 
-                  <CommandShortcut className="flex items-center gap-2 tracking-normal">
-                    <Badge
-                      variant="outline"
-                      className="rounded-md font-mono text-[0.625rem] tracking-wider"
-                    >
-                      {document.format}
-                    </Badge>
-                    {status && <span className="text-xs">{status}</span>}
-                  </CommandShortcut>
-                </CommandItem>
-              )
-            })}
-          </CommandGroup>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-semibold">
+                        {document.name}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {document.meta}
+                      </span>
+                    </span>
+
+                    <CommandShortcut className="flex items-center gap-2 tracking-normal">
+                      <Badge
+                        variant="outline"
+                        className="rounded-md font-mono text-[0.625rem] tracking-wider"
+                      >
+                        {document.format}
+                      </Badge>
+                      {status && <span className="text-xs">{status}</span>}
+                    </CommandShortcut>
+                  </CommandItem>
+                )
+              })}
+            </CommandGroup>
+          )}
         </CommandList>
 
         <div className="flex items-center gap-3 border-t px-4 py-3">

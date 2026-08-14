@@ -1,8 +1,8 @@
 import { cookies } from "next/headers"
 
+import { listChats } from "@/lib/chat-store"
 import { requireOrganization, requireSession } from "@/lib/session"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
-import { ChatHeader } from "@/components/chat/chat-header"
 import { ChatSidebar } from "@/components/chat/chat-sidebar"
 
 /** Written by `SidebarProvider`; read here so the first paint matches. */
@@ -15,7 +15,8 @@ const SIDEBAR_COOKIE_NAME = "sidebar_state"
  * anyone without one to onboarding.
  *
  * The inset is pinned to the viewport so the thread scrolls under a fixed
- * header and composer instead of growing the page.
+ * header and composer instead of growing the page. Each page renders its own
+ * header, because only the page knows which chat it's showing.
  */
 export default async function ChatLayout({
   children,
@@ -23,18 +24,20 @@ export default async function ChatLayout({
   children: React.ReactNode
 }>) {
   const session = await requireSession()
-  await requireOrganization()
-  const cookieStore = await cookies()
+  const organization = await requireOrganization()
+  const [chats, cookieStore] = await Promise.all([
+    listChats(organization.id),
+    cookies(),
+  ])
 
   return (
     <SidebarProvider
       defaultOpen={cookieStore.get(SIDEBAR_COOKIE_NAME)?.value !== "false"}
     >
-      <ChatSidebar user={session.user} />
+      <ChatSidebar user={session.user} chats={chats} />
 
       <SidebarInset className="h-svh min-w-0 overflow-hidden">
-        <ChatHeader user={session.user} />
-        <div className="flex min-h-0 flex-1 flex-col">{children}</div>
+        {children}
       </SidebarInset>
     </SidebarProvider>
   )

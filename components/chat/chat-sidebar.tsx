@@ -11,7 +11,7 @@ import {
 } from "lucide-react"
 
 import type { SessionUser } from "@/lib/auth-client"
-import { chatRoute, CHATS_ROUTE, recentChats } from "@/lib/chat"
+import { chatRoute, CHATS_ROUTE, type ChatSummary } from "@/lib/chat"
 import {
   APP_ROOT,
   BILLING_ROUTE,
@@ -46,7 +46,14 @@ const accountMenuItems = [
  * Chat chrome — `ui-design/dashboard/light/chat-sidebar.png`. The product nav
  * gives way to chat history here, so the only way back out is "Home".
  */
-function ChatSidebar({ user }: { user: SessionUser }) {
+function ChatSidebar({
+  user,
+  chats,
+}: {
+  user: SessionUser
+  /** This workspace's conversations, newest first. */
+  chats: ChatSummary[]
+}) {
   const pathname = usePathname()
 
   return (
@@ -90,23 +97,29 @@ function ChatSidebar({ user }: { user: SessionUser }) {
           </SidebarGroupLabel>
 
           <SidebarGroupContent>
-            <SidebarMenu className="gap-1">
-              {recentChats.map((chat) => {
-                const href = chatRoute(chat.id)
+            {chats.length === 0 ? (
+              <p className="px-2.5 py-1.5 text-sm text-muted-foreground">
+                Nothing yet. Add a document to start your first chat.
+              </p>
+            ) : (
+              <SidebarMenu className="gap-1">
+                {chats.map((chat) => {
+                  const href = chatRoute(chat.id)
 
-                return (
-                  <SidebarMenuItem key={chat.id}>
-                    <SidebarMenuButton
-                      render={<Link href={href} />}
-                      isActive={pathname === href}
-                      className="h-9 px-2.5 text-muted-foreground data-active:font-semibold data-active:text-sidebar-accent-foreground"
-                    >
-                      <span>{chat.title}</span>
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )
-              })}
-            </SidebarMenu>
+                  return (
+                    <SidebarMenuItem key={chat.id}>
+                      <SidebarMenuButton
+                        render={<Link href={href} />}
+                        isActive={pathname === href}
+                        className="h-9 px-2.5 text-muted-foreground data-active:font-semibold data-active:text-sidebar-accent-foreground"
+                      >
+                        <span>{chat.title}</span>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )
+                })}
+              </SidebarMenu>
+            )}
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

@@ -1,10 +1,8 @@
 "use client"
 
-import { usePathname } from "next/navigation"
 import { LayersIcon, SettingsIcon } from "lucide-react"
 
 import type { SessionUser } from "@/lib/auth-client"
-import { chatFromPathname } from "@/lib/chat"
 import { SETTINGS_ROUTE } from "@/lib/dashboard-nav"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -20,30 +18,34 @@ const accountMenuItems = [
 
 /**
  * Chrome above a chat — `chat-main.png` for a new chat, `chat-page-chat.png`
- * for one with documents. The title comes from the path rather than a prop so
- * the layout can own the header without knowing which chat is open.
+ * for one with documents. Each page passes its own title, since that now comes
+ * from the chat row rather than the path.
  */
-function ChatHeader({ user }: { user: SessionUser }) {
-  const pathname = usePathname()
-  const chat = chatFromPathname(pathname)
-
+function ChatHeader({
+  user,
+  title,
+  documentCount,
+}: {
+  user: SessionUser
+  title: string
+  /** Omitted on a new chat, which has nothing attached yet. */
+  documentCount?: number
+}) {
   return (
     <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b bg-background px-6">
       <SidebarTrigger className="-ml-2 cursor-pointer md:hidden" />
 
-      <h1 className="truncate text-base font-semibold">
-        {chat?.title ?? "New chat"}
-      </h1>
+      <h1 className="truncate text-base font-semibold">{title}</h1>
 
-      {chat && (
+      {documentCount ? (
         <Badge
           variant="secondary"
           className="shrink-0 gap-1.5 rounded-full text-muted-foreground"
         >
           <LayersIcon className="size-3.5" />
-          {chat.documents} docs
+          {documentCount} {documentCount === 1 ? "doc" : "docs"}
         </Badge>
-      )}
+      ) : null}
 
       <div className="ml-auto flex items-center gap-2">
         <ModeToggle className="size-9" />

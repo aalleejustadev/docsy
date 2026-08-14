@@ -1,19 +1,17 @@
 "use client"
 
 import * as React from "react"
-import {
-  ChevronDownIcon,
-  CopyIcon,
-  LayersIcon,
-  PaperclipIcon,
-  ThumbsDownIcon,
-  ThumbsUpIcon,
-} from "lucide-react"
+import { useRouter } from "next/navigation"
+import { ChevronDownIcon, LayersIcon, PaperclipIcon } from "lucide-react"
 
-import type { Chat, ChatMessage } from "@/lib/chat"
-import { MONTHLY_QUESTION_LIMIT } from "@/lib/chat"
+import {
+  MONTHLY_QUESTION_LIMIT,
+  type ChatDetail,
+  type ChatMessageView,
+  type ChatSource,
+} from "@/lib/chat"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Bubble, BubbleContent } from "@/components/ui/bubble"
-import { Button } from "@/components/ui/button"
 import { InputGroupButton } from "@/components/ui/input-group"
 import {
   Message,
@@ -31,25 +29,87 @@ import {
 } from "@/components/ui/message-scroller"
 import { Separator } from "@/components/ui/separator"
 import { DocsyMark } from "@/components/brand/docsy-logo"
+import { TypingDots } from "@/components/common/typing-dots"
+import { AnswerActions } from "@/components/chat/answer-actions"
+import { AnswerMarkdown } from "@/components/chat/answer-markdown"
 import { ChatComposer } from "@/components/chat/chat-composer"
 
-/** Turns the `[1]` markers the model writes into superscript citations. */
-function withCitations(content: string) {
-  return content.split(/(\[\d+\])/g).map((part, index) =>
-    /^\[\d+\]$/.test(part) ? (
-      <sup
-        key={index}
-        className="ml-0.5 font-mono text-[0.625rem] font-semibold text-brand"
-      >
-        {part}
-      </sup>
-    ) : (
-      <React.Fragment key={index}>{part}</React.Fragment>
-    )
+function AnswerBody({
+  content,
+  sources,
+}: {
+  content: string
+  sources: ChatSource[]
+}) {
+  return (
+    <>
+      <Bubble variant="ghost">
+        <BubbleContent className="text-base">
+          <AnswerMarkdown>{content}</AnswerMarkdown>
+        </BubbleContent>
+      </Bubble>
+
+      {sources.length > 0 && (
+        <>
+          <Separator />
+
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[0.6875rem] font-bold tracking-[0.08em] text-muted-foreground uppercase">
+              Sources
+            </span>
+
+            {sources.map((source) => (
+              <span
+                key={source.index}
+                className="flex items-center gap-2 rounded-lg border bg-surface px-2.5 py-1.5 text-sm"
+              >
+                <span className="font-mono text-xs font-semibold text-brand">
+                  [{source.index}]
+                </span>
+                {source.document}
+                {source.page !== null && ` · p.${source.page}`}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+    </>
   )
 }
 
-function ChatTurn({ message }: { message: ChatMessage }) {
+function AssistantTurn({
+  children,
+  actions,
+}: {
+  children: React.ReactNode
+  /** Omitted while an answer is still streaming — there's nothing to copy yet. */
+  actions?: React.ReactNode
+}) {
+  return (
+    <Message align="start">
+      <MessageContent className="gap-3">
+        <MessageHeader className="gap-2 px-0">
+          <DocsyMark className="size-5" />
+          <span className="text-[0.6875rem] font-bold tracking-[0.08em] uppercase">
+            Docsy
+          </span>
+        </MessageHeader>
+
+        {children}
+
+        {actions && <MessageFooter className="px-0">{actions}</MessageFooter>}
+      </MessageContent>
+    </Message>
+  )
+}
+
+function ChatTurn({
+  message,
+  chatId,
+}: {
+  message: ChatMessageView
+  chatId: string
+}) {
   if (message.role === "user") {
     return (
       <Message align="end">
@@ -65,93 +125,182 @@ function ChatTurn({ message }: { message: ChatMessage }) {
   }
 
   return (
-    <Message align="start">
-      <MessageContent className="gap-3">
-        <MessageHeader className="gap-2 px-0">
-          <DocsyMark className="size-5" />
-          <span className="text-[0.6875rem] font-bold tracking-[0.08em] uppercase">
-            Docsy
-          </span>
-        </MessageHeader>
-
-        <Bubble variant="ghost">
-          <BubbleContent className="text-base leading-relaxed">
-            {withCitations(message.content)}
-          </BubbleContent>
-        </Bubble>
-
-        {message.sources && (
-          <>
-            <Separator />
-
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-[0.6875rem] font-bold tracking-[0.08em] text-muted-foreground uppercase">
-                Sources
-              </span>
-
-              {message.sources.map((source) => (
-                <span
-                  key={source.index}
-                  className="flex items-center gap-2 rounded-lg border bg-surface px-2.5 py-1.5 text-sm"
-                >
-                  <span className="font-mono text-xs font-semibold text-brand">
-                    [{source.index}]
-                  </span>
-                  {source.document} · p.{source.page}
-                </span>
-              ))}
-            </div>
-
-            <MessageFooter className="gap-1 px-0">
-              <Button
-                variant="outline"
-                size="icon-sm"
-                className="cursor-pointer"
-                aria-label="Copy answer"
-              >
-                <CopyIcon />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon-sm"
-                className="cursor-pointer"
-                aria-label="Helpful"
-              >
-                <ThumbsUpIcon />
-              </Button>
-              <Button
-                variant="outline"
-                size="icon-sm"
-                className="cursor-pointer"
-                aria-label="Not helpful"
-              >
-                <ThumbsDownIcon />
-              </Button>
-            </MessageFooter>
-          </>
-        )}
-      </MessageContent>
-    </Message>
+    <AssistantTurn
+      actions={
+        <AnswerActions
+          chatId={chatId}
+          messageId={message.id}
+          content={message.content}
+          feedback={message.feedback}
+        />
+      }
+    >
+      <AnswerBody content={message.content} sources={message.sources} />
+    </AssistantTurn>
   )
 }
 
 /** An open chat — `ui-design/dashboard/light/chat-page-chat.png`. */
-function ChatConversation({ chat }: { chat: Chat }) {
+function ChatConversation({ chat }: { chat: ChatDetail }) {
+  const router = useRouter()
+  const [messages, setMessages] = React.useState(chat.messages)
+  const [streamed, setStreamed] = React.useState("")
+  const [isAnswering, setIsAnswering] = React.useState(chat.pendingAnswer)
+  const [error, setError] = React.useState<string | null>(null)
+
+  // React 18 mounts effects twice in dev; without this the seeded analysis
+  // would be requested — and billed — twice on every load.
+  const requested = React.useRef(false)
+
+  const answer = React.useCallback(
+    async (question?: string) => {
+      let text = ""
+
+      try {
+        const response = await fetch(`/api/chats/${chat.id}/messages`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(question ? { question } : {}),
+        })
+
+        if (!response.ok || !response.body) {
+          const detail = await response.json().catch(() => null)
+          setError(detail?.error ?? "Couldn't reach Docsy.")
+          setIsAnswering(false)
+          return
+        }
+
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ""
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split("\n")
+          // The tail is whatever arrived after the last newline — an incomplete
+          // event, so it waits for the next chunk rather than failing to parse.
+          buffer = lines.pop() ?? ""
+
+          for (const line of lines) {
+            if (!line.trim()) continue
+
+            const event = JSON.parse(line)
+
+            if (event.type === "text") {
+              text += event.value
+              setStreamed(text)
+            }
+
+            if (event.type === "error") {
+              // A refusal can arrive after partial text; that partial isn't a
+              // real answer, so it goes rather than being left on screen.
+              setStreamed("")
+              setError(event.value)
+              setIsAnswering(false)
+              return
+            }
+
+            if (event.type === "done") {
+              setMessages((current) => [
+                ...current,
+                {
+                  id: event.messageId as string,
+                  role: "assistant",
+                  content: text,
+                  sources: event.sources as ChatSource[],
+                  feedback: null,
+                },
+              ])
+              setStreamed("")
+              setIsAnswering(false)
+              // Pulls the saved ids and re-sorts the sidebar.
+              router.refresh()
+              return
+            }
+          }
+        }
+
+        setError("The answer stopped early. Ask again to retry.")
+        setIsAnswering(false)
+      } catch {
+        setError("The connection dropped before the answer finished.")
+        setIsAnswering(false)
+      }
+    },
+    [chat.id, router]
+  )
+
+  React.useEffect(() => {
+    if (!chat.pendingAnswer || requested.current) return
+
+    requested.current = true
+    void answer()
+  }, [chat.pendingAnswer, answer])
+
+  function ask(question: string) {
+    setError(null)
+    setMessages((current) => [
+      ...current,
+      {
+        id: `question-${current.length}`,
+        role: "user",
+        content: question,
+        sources: [],
+        feedback: null,
+      },
+    ])
+    setIsAnswering(true)
+    void answer(question)
+  }
+
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <MessageScrollerProvider autoScroll>
         <MessageScroller className="flex-1">
-          <MessageScrollerViewport className="px-6">
+          {/* The viewport is `tabindex=0` so it can be arrow-scrolled, which
+              means the browser rings the whole pane once it takes focus. The
+              ring is dropped here — it reads as a stray border around the
+              thread, and every control inside keeps its own focus ring. */}
+          <MessageScrollerViewport className="px-6 outline-none">
             <MessageScrollerContent className="mx-auto w-full max-w-3xl py-8">
-              {chat.messages.map((message) => (
+              {messages.map((message) => (
                 <MessageScrollerItem
                   key={message.id}
                   messageId={message.id}
                   scrollAnchor={message.role === "user"}
                 >
-                  <ChatTurn message={message} />
+                  <ChatTurn message={message} chatId={chat.id} />
                 </MessageScrollerItem>
               ))}
+
+              {isAnswering && (
+                <MessageScrollerItem messageId="answering">
+                  <AssistantTurn>
+                    {streamed ? (
+                      <AnswerBody content={streamed} sources={[]} />
+                    ) : (
+                      <Bubble variant="ghost">
+                        <BubbleContent className="flex items-center gap-2 text-sm text-muted-foreground">
+                          Reading your document
+                          <TypingDots />
+                        </BubbleContent>
+                      </Bubble>
+                    )}
+                  </AssistantTurn>
+                </MessageScrollerItem>
+              )}
+
+              {error && (
+                <MessageScrollerItem messageId="error">
+                  <Alert variant="destructive">
+                    <AlertTitle>Docsy couldn&apos;t answer</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                </MessageScrollerItem>
+              )}
             </MessageScrollerContent>
           </MessageScrollerViewport>
 
@@ -163,6 +312,8 @@ function ChatConversation({ chat }: { chat: Chat }) {
         <div className="mx-auto w-full max-w-3xl">
           <ChatComposer
             tone="outline"
+            disabled={isAnswering}
+            onSend={ask}
             placeholder="Ask a follow-up about your documents…"
             footer={
               <>
@@ -181,7 +332,8 @@ function ChatConversation({ chat }: { chat: Chat }) {
                   aria-label="Choose which documents to search"
                 >
                   <LayersIcon />
-                  All {chat.documents} documents
+                  All {chat.documentCount}{" "}
+                  {chat.documentCount === 1 ? "document" : "documents"}
                   <ChevronDownIcon />
                 </InputGroupButton>
 

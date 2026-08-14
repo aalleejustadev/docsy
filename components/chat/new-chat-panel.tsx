@@ -1,25 +1,18 @@
 "use client"
 
 import * as React from "react"
-import { FileTextIcon, LibraryIcon, UploadIcon, XIcon } from "lucide-react"
+import { useRouter } from "next/navigation"
+import { LibraryIcon, UploadIcon } from "lucide-react"
 
 import {
+  chatRoute,
   DOCUMENT_ACCEPT,
   DOCUMENT_FORMATS_LABEL,
   MAX_DOCUMENTS_PER_CHAT,
+  type LibraryDocumentView,
 } from "@/lib/chat"
-import type { LibraryDocument } from "@/lib/library"
 import { cn } from "@/lib/utils"
-import {
-  Attachment,
-  AttachmentAction,
-  AttachmentActions,
-  AttachmentContent,
-  AttachmentDescription,
-  AttachmentGroup,
-  AttachmentMedia,
-  AttachmentTitle,
-} from "@/components/ui/attachment"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -30,96 +23,101 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Marker, MarkerContent } from "@/components/ui/marker"
+import { Spinner } from "@/components/ui/spinner"
 import { DocsyMark } from "@/components/brand/docsy-logo"
 import { ChatComposer } from "@/components/chat/chat-composer"
 import { LibraryPickerDialog } from "@/components/chat/library-picker-dialog"
 
-type ChatDocument = {
-  id: string
-  name: string
-  /** Size, and page count when the library knows it. */
-  meta: string
-}
-
-/** Namespaces library ids so they can't collide with picked files. */
-const LIBRARY_PREFIX = "library:"
-
-function formatSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`
-
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
 /**
  * A chat before it has any documents — `ui-design/dashboard/light/chat-main.png`.
- * Docsy answers only from sources you provide, so the upload is the gate: the
- * composer stays disabled until at least one document is attached.
+ *
+ * Providing a document *is* the action: as soon as one lands, the chat is
+ * created and the developer is taken to the thread, where the brief analysis
+ * streams in. That's why the composer here stays disabled — there's nothing to
+ * ask until Docsy has something to read.
  */
-function NewChatPanel() {
-  const [documents, setDocuments] = React.useState<ChatDocument[]>([])
+function NewChatPanel({ documents }: { documents: LibraryDocumentView[] }) {
+  const router = useRouter()
   const [isDragging, setIsDragging] = React.useState(false)
   const [isLibraryOpen, setIsLibraryOpen] = React.useState(false)
+  const [busy, setBusy] = React.useState<string | null>(null)
+  const [error, setError] = React.useState<string | null>(null)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
-  const hasDocuments = documents.length > 0
+  async function startChat(documentIds: string[]) {
+    setBusy("Opening the chat…")
 
-  const addedLibraryIds = documents
-    .filter((document) => document.id.startsWith(LIBRARY_PREFIX))
-    .map((document) => document.id.slice(LIBRARY_PREFIX.length))
+    const response = await fetch("/api/chats", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ documentIds }),
+    })
 
-  function addDocuments(incoming: ChatDocument[]) {
-    setDocuments((current) => {
-      const merged = [...current]
+    if (!response.ok) {
+      const detail = await response.json().catch(() => null)
+      setError(detail?.error ?? "Couldn't start that chat.")
+      setBusy(null)
+      return
+    }
 
-      for (const document of incoming) {
-        if (!merged.some((existing) => existing.id === document.id)) {
-          merged.push(document)
-        }
+    const chat = (await response.json()) as { id: string }
+
+    // No `setBusy(null)`: the navigation replaces this screen, and clearing it
+    // first would flash the empty state on the way out.
+    router.push(chatRoute(chat.id))
+  }
+
+  async function uploadAndStart(files: File[]) {
+    if (files.length === 0) return
+
+    setError(null)
+    const uploaded: string[] = []
+
+    for (const [index, file] of files
+      .slice(0, MAX_DOCUMENTS_PER_CHAT)
+      .entries()) {
+      setBusy(
+        files.length > 1
+          ? `Reading ${file.name} (${index + 1} of ${files.length})…`
+          : `Reading ${file.name}…`
+      )
+
+      const form = new FormData()
+      form.append("file", file)
+
+      const response = await fetch("/api/documents", {
+        method: "POST",
+        body: form,
+      })
+
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null)
+        setError(detail?.error ?? `Couldn't read ${file.name}.`)
+        setBusy(null)
+        return
       }
 
-      return merged.slice(0, MAX_DOCUMENTS_PER_CHAT)
-    })
+      const document = (await response.json()) as LibraryDocumentView
+      uploaded.push(document.id)
+    }
+
+    await startChat(uploaded)
   }
 
-  function addFiles(files: FileList | null) {
-    if (!files?.length) return
-
-    addDocuments(
-      Array.from(files).map((file) => ({
-        id: `${file.name}-${file.size}-${file.lastModified}`,
-        name: file.name,
-        meta: formatSize(file.size),
-      }))
-    )
-  }
-
-  function addFromLibrary(picked: LibraryDocument[]) {
-    addDocuments(
-      picked.map((document) => ({
-        id: `${LIBRARY_PREFIX}${document.id}`,
-        name: document.name,
-        meta: document.meta,
-      }))
-    )
-  }
-
-  function removeDocument(id: string) {
-    setDocuments((current) => current.filter((document) => document.id !== id))
-  }
+  const isBusy = busy !== null
 
   return (
     <div
       className="flex min-h-0 flex-1 flex-col"
       onDragOver={(event) => {
         event.preventDefault()
-        setIsDragging(true)
+        if (!isBusy) setIsDragging(true)
       }}
       onDragLeave={() => setIsDragging(false)}
       onDrop={(event) => {
         event.preventDefault()
         setIsDragging(false)
-        addFiles(event.dataTransfer.files)
+        if (!isBusy) void uploadAndStart(Array.from(event.dataTransfer.files))
       }}
     >
       <div className="flex flex-1 items-center justify-center overflow-y-auto px-6 py-10">
@@ -130,32 +128,51 @@ function NewChatPanel() {
             </EmptyMedia>
 
             <EmptyTitle className="text-2xl font-bold">
-              {hasDocuments ? "Ready when you are" : "Add documents to start"}
+              Add documents to start
             </EmptyTitle>
 
             <EmptyDescription>
-              {hasDocuments
-                ? "Ask your first question below. Every claim in the answer will point back to one of these documents."
-                : "Docsy only answers from sources you provide, with a citation for every claim. Attach at least one document to begin this chat."}
+              Docsy only answers from sources you provide, with a citation for
+              every claim. Attach at least one document to begin this chat.
             </EmptyDescription>
           </EmptyHeader>
 
           <EmptyContent className="max-w-none gap-4">
+            {error && (
+              <Alert variant="destructive" className="text-left">
+                <AlertTitle>That didn&apos;t work</AlertTitle>
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
             <button
               type="button"
+              disabled={isBusy}
               onClick={() => fileInputRef.current?.click()}
               className={cn(
-                "flex w-full cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed bg-surface px-6 py-10 text-center transition-colors hover:border-brand",
+                "flex w-full cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed bg-surface px-6 py-10 text-center transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-70",
                 isDragging && "border-brand bg-accent/40"
               )}
             >
-              <UploadIcon className="size-5 text-muted-foreground" />
-              <span className="font-semibold">
-                Drop files here or click to upload
-              </span>
-              <span className="text-sm text-muted-foreground">
-                {DOCUMENT_FORMATS_LABEL}
-              </span>
+              {isBusy ? (
+                <>
+                  <Spinner className="size-5 text-muted-foreground" />
+                  <span className="font-semibold">{busy}</span>
+                  <span className="text-sm text-muted-foreground">
+                    Large briefs take a few seconds to read.
+                  </span>
+                </>
+              ) : (
+                <>
+                  <UploadIcon className="size-5 text-muted-foreground" />
+                  <span className="font-semibold">
+                    Drop files here or click to upload
+                  </span>
+                  <span className="text-sm text-muted-foreground">
+                    {DOCUMENT_FORMATS_LABEL}
+                  </span>
+                </>
+              )}
             </button>
 
             <input
@@ -165,39 +182,12 @@ function NewChatPanel() {
               accept={DOCUMENT_ACCEPT}
               className="sr-only"
               onChange={(event) => {
-                addFiles(event.target.files)
+                const files = Array.from(event.target.files ?? [])
                 // Reset so re-picking the same file still fires `change`.
                 event.target.value = ""
+                void uploadAndStart(files)
               }}
             />
-
-            {hasDocuments && (
-              <AttachmentGroup className="w-full">
-                {documents.map((document) => (
-                  <Attachment key={document.id} state="idle" size="sm">
-                    <AttachmentMedia variant="icon">
-                      <FileTextIcon />
-                    </AttachmentMedia>
-
-                    <AttachmentContent>
-                      <AttachmentTitle>{document.name}</AttachmentTitle>
-                      <AttachmentDescription>
-                        {document.meta}
-                      </AttachmentDescription>
-                    </AttachmentContent>
-
-                    <AttachmentActions>
-                      <AttachmentAction
-                        aria-label={`Remove ${document.name}`}
-                        onClick={() => removeDocument(document.id)}
-                      >
-                        <XIcon />
-                      </AttachmentAction>
-                    </AttachmentActions>
-                  </Attachment>
-                ))}
-              </AttachmentGroup>
-            )}
 
             <Marker variant="separator">
               <MarkerContent className="text-xs">OR</MarkerContent>
@@ -207,6 +197,7 @@ function NewChatPanel() {
               variant="outline"
               size="lg"
               className="w-full cursor-pointer"
+              disabled={isBusy}
               onClick={() => setIsLibraryOpen(true)}
             >
               <LibraryIcon />
@@ -219,12 +210,8 @@ function NewChatPanel() {
       <div className="shrink-0 px-6 pb-6">
         <div className="mx-auto w-full max-w-3xl">
           <ChatComposer
-            disabled={!hasDocuments}
-            placeholder={
-              hasDocuments
-                ? "Ask your first question…"
-                : "Add a document to ask your first question…"
-            }
+            disabled
+            placeholder="Add a document to ask your first question…"
           />
         </div>
       </div>
@@ -232,8 +219,12 @@ function NewChatPanel() {
       <LibraryPickerDialog
         open={isLibraryOpen}
         onOpenChange={setIsLibraryOpen}
-        onAdd={addFromLibrary}
-        addedIds={addedLibraryIds}
+        documents={documents}
+        addedIds={[]}
+        onAdd={(picked) => {
+          setError(null)
+          void startChat(picked.map((document) => document.id))
+        }}
       />
     </div>
   )
