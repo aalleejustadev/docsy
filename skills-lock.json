@@ -25,6 +25,12 @@
       "skillPath": "skills/claimable-postgres/SKILL.md",
       "computedHash": "1ad33258166b0d2edb02cd6134c7cac66d6e04207fb0767255dcc521a795e0a4"
     },
+    "claude-api": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/claude-api/SKILL.md",
+      "computedHash": "e26a93926a5bfe5d488178cbb77d7ab0fc3a00dd367057adfdef01c70d35621b"
+    },
     "create-auth": {
       "source": "better-auth/skills",
       "sourceType": "github",

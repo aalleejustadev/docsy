@@ -8,6 +8,7 @@ import {
   DOCUMENT_FORMATS_LABEL,
   MAX_DOCUMENTS_PER_CHAT,
 } from "@/lib/chat"
+import type { LibraryDocument } from "@/lib/library"
 import { cn } from "@/lib/utils"
 import {
   Attachment,
@@ -31,13 +32,17 @@ import {
 import { Marker, MarkerContent } from "@/components/ui/marker"
 import { DocsyMark } from "@/components/brand/docsy-logo"
 import { ChatComposer } from "@/components/chat/chat-composer"
+import { LibraryPickerDialog } from "@/components/chat/library-picker-dialog"
 
-type PendingDocument = {
-  /** Name + size + mtime — enough to spot the same file picked twice. */
+type ChatDocument = {
   id: string
   name: string
-  size: number
+  /** Size, and page count when the library knows it. */
+  meta: string
 }
+
+/** Namespaces library ids so they can't collide with picked files. */
+const LIBRARY_PREFIX = "library:"
 
 function formatSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`
@@ -52,21 +57,18 @@ function formatSize(bytes: number) {
  * composer stays disabled until at least one document is attached.
  */
 function NewChatPanel() {
-  const [documents, setDocuments] = React.useState<PendingDocument[]>([])
+  const [documents, setDocuments] = React.useState<ChatDocument[]>([])
   const [isDragging, setIsDragging] = React.useState(false)
+  const [isLibraryOpen, setIsLibraryOpen] = React.useState(false)
   const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   const hasDocuments = documents.length > 0
 
-  function addFiles(files: FileList | null) {
-    if (!files?.length) return
+  const addedLibraryIds = documents
+    .filter((document) => document.id.startsWith(LIBRARY_PREFIX))
+    .map((document) => document.id.slice(LIBRARY_PREFIX.length))
 
-    const incoming = Array.from(files).map((file) => ({
-      id: `${file.name}-${file.size}-${file.lastModified}`,
-      name: file.name,
-      size: file.size,
-    }))
-
+  function addDocuments(incoming: ChatDocument[]) {
     setDocuments((current) => {
       const merged = [...current]
 
@@ -78,6 +80,28 @@ function NewChatPanel() {
 
       return merged.slice(0, MAX_DOCUMENTS_PER_CHAT)
     })
+  }
+
+  function addFiles(files: FileList | null) {
+    if (!files?.length) return
+
+    addDocuments(
+      Array.from(files).map((file) => ({
+        id: `${file.name}-${file.size}-${file.lastModified}`,
+        name: file.name,
+        meta: formatSize(file.size),
+      }))
+    )
+  }
+
+  function addFromLibrary(picked: LibraryDocument[]) {
+    addDocuments(
+      picked.map((document) => ({
+        id: `${LIBRARY_PREFIX}${document.id}`,
+        name: document.name,
+        meta: document.meta,
+      }))
+    )
   }
 
   function removeDocument(id: string) {
@@ -158,7 +182,7 @@ function NewChatPanel() {
                     <AttachmentContent>
                       <AttachmentTitle>{document.name}</AttachmentTitle>
                       <AttachmentDescription>
-                        {formatSize(document.size)}
+                        {document.meta}
                       </AttachmentDescription>
                     </AttachmentContent>
 
@@ -179,11 +203,11 @@ function NewChatPanel() {
               <MarkerContent className="text-xs">OR</MarkerContent>
             </Marker>
 
-            {/* Waits on the picker in `choose-from-library-modal.png`. */}
             <Button
               variant="outline"
               size="lg"
               className="w-full cursor-pointer"
+              onClick={() => setIsLibraryOpen(true)}
             >
               <LibraryIcon />
               Choose from Library
@@ -204,6 +228,13 @@ function NewChatPanel() {
           />
         </div>
       </div>
+
+      <LibraryPickerDialog
+        open={isLibraryOpen}
+        onOpenChange={setIsLibraryOpen}
+        onAdd={addFromLibrary}
+        addedIds={addedLibraryIds}
+      />
     </div>
   )
 }
