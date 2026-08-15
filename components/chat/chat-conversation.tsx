@@ -398,7 +398,10 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
         </div>
       </div>
 
-      <SourceReader citation={activeCitation} />
+      <SourceReader
+        citation={activeCitation}
+        onDismiss={() => setActiveCitation(null)}
+      />
     </div>
   )
 }
