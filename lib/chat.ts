@@ -83,10 +83,17 @@ export type ChatSummary = {
   preview: string | null
 }
 
+/** A document attached to a chat, as the composer's scope picker lists it. */
+export type ChatDocumentView = {
+  id: string
+  name: string
+}
+
 export type ChatDetail = {
   id: string
   title: string
-  documentCount: number
+  /** In citation order, which is the order they go to Claude. */
+  documents: ChatDocumentView[]
   questionsUsed: number
   messages: ChatMessageView[]
   /**

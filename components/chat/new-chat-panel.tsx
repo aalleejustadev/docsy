@@ -2,16 +2,13 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { LibraryIcon, UploadIcon } from "lucide-react"
+import { LibraryIcon } from "lucide-react"
 
 import {
   chatRoute,
-  DOCUMENT_ACCEPT,
-  DOCUMENT_FORMATS_LABEL,
   MAX_DOCUMENTS_PER_CHAT,
   type LibraryDocumentView,
 } from "@/lib/chat"
-import { cn } from "@/lib/utils"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -23,9 +20,9 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Marker, MarkerContent } from "@/components/ui/marker"
-import { Spinner } from "@/components/ui/spinner"
 import { DocsyMark } from "@/components/brand/docsy-logo"
 import { ChatComposer } from "@/components/chat/chat-composer"
+import { DocumentDropzone } from "@/components/chat/document-dropzone"
 import { LibraryPickerDialog } from "@/components/chat/library-picker-dialog"
 
 /**
@@ -38,11 +35,9 @@ import { LibraryPickerDialog } from "@/components/chat/library-picker-dialog"
  */
 function NewChatPanel({ documents }: { documents: LibraryDocumentView[] }) {
   const router = useRouter()
-  const [isDragging, setIsDragging] = React.useState(false)
   const [isLibraryOpen, setIsLibraryOpen] = React.useState(false)
   const [busy, setBusy] = React.useState<string | null>(null)
   const [error, setError] = React.useState<string | null>(null)
-  const fileInputRef = React.useRef<HTMLInputElement>(null)
 
   async function startChat(documentIds: string[]) {
     setBusy("Opening the chat…")
@@ -107,19 +102,7 @@ function NewChatPanel({ documents }: { documents: LibraryDocumentView[] }) {
   const isBusy = busy !== null
 
   return (
-    <div
-      className="flex min-h-0 flex-1 flex-col"
-      onDragOver={(event) => {
-        event.preventDefault()
-        if (!isBusy) setIsDragging(true)
-      }}
-      onDragLeave={() => setIsDragging(false)}
-      onDrop={(event) => {
-        event.preventDefault()
-        setIsDragging(false)
-        if (!isBusy) void uploadAndStart(Array.from(event.dataTransfer.files))
-      }}
-    >
+    <div className="flex min-h-0 flex-1 flex-col">
       <div className="flex flex-1 items-center justify-center overflow-y-auto px-6 py-10">
         <Empty className="max-w-xl p-0">
           <EmptyHeader className="max-w-lg">
@@ -145,48 +128,9 @@ function NewChatPanel({ documents }: { documents: LibraryDocumentView[] }) {
               </Alert>
             )}
 
-            <button
-              type="button"
-              disabled={isBusy}
-              onClick={() => fileInputRef.current?.click()}
-              className={cn(
-                "flex w-full cursor-pointer flex-col items-center gap-2 rounded-xl border border-dashed bg-surface px-6 py-10 text-center transition-colors hover:border-brand disabled:cursor-not-allowed disabled:opacity-70",
-                isDragging && "border-brand bg-accent/40"
-              )}
-            >
-              {isBusy ? (
-                <>
-                  <Spinner className="size-5 text-muted-foreground" />
-                  <span className="font-semibold">{busy}</span>
-                  <span className="text-sm text-muted-foreground">
-                    Large briefs take a few seconds to read.
-                  </span>
-                </>
-              ) : (
-                <>
-                  <UploadIcon className="size-5 text-muted-foreground" />
-                  <span className="font-semibold">
-                    Drop files here or click to upload
-                  </span>
-                  <span className="text-sm text-muted-foreground">
-                    {DOCUMENT_FORMATS_LABEL}
-                  </span>
-                </>
-              )}
-            </button>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept={DOCUMENT_ACCEPT}
-              className="sr-only"
-              onChange={(event) => {
-                const files = Array.from(event.target.files ?? [])
-                // Reset so re-picking the same file still fires `change`.
-                event.target.value = ""
-                void uploadAndStart(files)
-              }}
+            <DocumentDropzone
+              busy={busy}
+              onFiles={(files) => void uploadAndStart(files)}
             />
 
             <Marker variant="separator">

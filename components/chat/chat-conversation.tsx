@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { ChevronDownIcon, LayersIcon, PaperclipIcon } from "lucide-react"
+import { PaperclipIcon } from "lucide-react"
 
 import {
   MONTHLY_QUESTION_LIMIT,
@@ -31,6 +31,8 @@ import { Separator } from "@/components/ui/separator"
 import { DocsyMark } from "@/components/brand/docsy-logo"
 import { TypingDots } from "@/components/common/typing-dots"
 import { AnswerActions } from "@/components/chat/answer-actions"
+import { AttachDocumentsDialog } from "@/components/chat/attach-documents-dialog"
+import { DocumentScope } from "@/components/chat/document-scope"
 import {
   SourceReader,
   type ActiveCitation,
@@ -177,6 +179,20 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
   const [streamed, setStreamed] = React.useState("")
   const [isAnswering, setIsAnswering] = React.useState(chat.pendingAnswer)
   const [error, setError] = React.useState<string | null>(null)
+  const [isAttachOpen, setIsAttachOpen] = React.useState(false)
+  // Tracked as what's been *excluded* rather than what's selected, so a
+  // document attached mid-chat joins the scope automatically and a stale id
+  // from a detached one simply falls out. Held in the page rather than stored,
+  // because a scope is about the question being asked, not the chat.
+  const [excluded, setExcluded] = React.useState<string[]>([])
+
+  const scope = chat.documents
+    .map((document) => document.id)
+    .filter((id) => !excluded.includes(id))
+
+  // A stable dependency for the send callback: the array itself is rebuilt
+  // every render, so depending on it directly would rebuild the callback too.
+  const scopeKey = scope.join(",")
   const [activeCitation, setActiveCitation] =
     React.useState<ActiveCitation | null>(() => {
       const source = [...chat.messages]
@@ -198,7 +214,10 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
         const response = await fetch(`/api/chats/${chat.id}/messages`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(question ? { question } : {}),
+          body: JSON.stringify({
+            ...(question ? { question } : {}),
+            documentIds: scopeKey.split(","),
+          }),
         })
 
         if (!response.ok || !response.body) {
@@ -272,7 +291,7 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
         setIsAnswering(false)
       }
     },
-    [chat.id, router]
+    [chat.id, router, scopeKey]
   )
 
   React.useEffect(() => {
@@ -369,20 +388,23 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
                     variant="ghost"
                     className="cursor-pointer"
                     aria-label="Attach a document"
+                    onClick={() => setIsAttachOpen(true)}
                   >
                     <PaperclipIcon />
                   </InputGroupButton>
 
-                  <InputGroupButton
-                    variant="outline"
-                    className="cursor-pointer"
-                    aria-label="Choose which documents to search"
-                  >
-                    <LayersIcon />
-                    All {chat.documentCount}{" "}
-                    {chat.documentCount === 1 ? "document" : "documents"}
-                    <ChevronDownIcon />
-                  </InputGroupButton>
+                  <DocumentScope
+                    documents={chat.documents}
+                    selected={scope}
+                    onChange={(next) =>
+                      setExcluded(
+                        chat.documents
+                          .map((document) => document.id)
+                          .filter((id) => !next.includes(id))
+                      )
+                    }
+                    disabled={isAnswering}
+                  />
 
                   <span className="ml-auto font-mono text-xs text-muted-foreground">
                     {chat.questionsUsed} / {MONTHLY_QUESTION_LIMIT} questions
@@ -401,6 +423,13 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
       <SourceReader
         citation={activeCitation}
         onDismiss={() => setActiveCitation(null)}
+      />
+
+      <AttachDocumentsDialog
+        chatId={chat.id}
+        attachedIds={chat.documents.map((document) => document.id)}
+        open={isAttachOpen}
+        onOpenChange={setIsAttachOpen}
       />
     </div>
   )

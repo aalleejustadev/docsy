@@ -46,7 +46,7 @@ export async function POST(
     return NextResponse.json({ error: "Chat not found." }, { status: 404 })
   }
 
-  let body: { question?: unknown } = {}
+  let body: { question?: unknown; documentIds?: unknown } = {}
   try {
     body = await request.json()
   } catch {
@@ -65,15 +65,34 @@ export async function POST(
     )
   }
 
-  const [documents, history] = await Promise.all([
+  const [attached, history] = await Promise.all([
     getChatDocuments(chatId),
     getChatHistory(chatId),
   ])
 
-  if (documents.length === 0) {
+  if (attached.length === 0) {
     return NextResponse.json(
       { error: "That chat has no documents to read." },
       { status: 409 }
+    )
+  }
+
+  // A scope narrows which of the chat's documents this answer may draw on.
+  // Filtering preserves the chat's own order, so citation numbering still runs
+  // top to bottom, and `document_index` keeps lining up with what we sent.
+  const scope = Array.isArray(body.documentIds)
+    ? body.documentIds.filter((id): id is string => typeof id === "string")
+    : null
+
+  const documents =
+    scope === null
+      ? attached
+      : attached.filter((document) => scope.includes(document.id))
+
+  if (documents.length === 0) {
+    return NextResponse.json(
+      { error: "None of those documents belong to this chat." },
+      { status: 400 }
     )
   }
 

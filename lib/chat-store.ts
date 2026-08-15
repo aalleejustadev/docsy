@@ -117,7 +117,10 @@ export async function getChat(
     select: {
       id: true,
       title: true,
-      _count: { select: { documents: true } },
+      documents: {
+        orderBy: { position: "asc" },
+        select: { document: { select: { id: true, name: true } } },
+      },
       messages: {
         orderBy: { createdAt: "asc" },
         select: {
@@ -139,7 +142,7 @@ export async function getChat(
   return {
     id: chat.id,
     title: chat.title,
-    documentCount: chat._count.documents,
+    documents: chat.documents.map((link) => link.document),
     questionsUsed: chat.messages.filter(
       (message) => message.role === "USER" && !message.hidden
     ).length,
@@ -338,4 +341,79 @@ export async function deleteChat(chatId: string, organizationId: string) {
       keptSharedDocuments: documentIds.length - orphaned.length,
     }
   })
+}
+
+/**
+ * Adds documents to a chat that already exists — what the composer's paperclip
+ * does.
+ *
+ * New links go on the end so the existing citation numbering doesn't shift
+ * under answers already written. Documents already on the chat are skipped
+ * rather than duplicated, and the whole thing is refused if it would take the
+ * chat past its document cap.
+ */
+export async function attachDocuments({
+  chatId,
+  organizationId,
+  documentIds,
+  maxDocuments,
+}: {
+  chatId: string
+  organizationId: string
+  documentIds: string[]
+  maxDocuments: number
+}) {
+  const chat = await db.chat.findFirst({
+    where: { id: chatId, organizationId },
+    select: {
+      id: true,
+      documents: { select: { documentId: true, position: true } },
+    },
+  })
+
+  if (!chat) return { ok: false as const, reason: "not-found" as const }
+
+  const ready = await db.document.findMany({
+    where: { id: { in: documentIds }, organizationId, status: "READY" },
+    select: { id: true },
+  })
+
+  if (ready.length !== documentIds.length) {
+    return { ok: false as const, reason: "unavailable" as const }
+  }
+
+  const existing = new Set(chat.documents.map((link) => link.documentId))
+  const incoming = documentIds.filter((id) => !existing.has(id))
+
+  if (incoming.length === 0) {
+    return {
+      ok: true as const,
+      attached: 0,
+      alreadyAttached: documentIds.length,
+    }
+  }
+
+  if (existing.size + incoming.length > maxDocuments) {
+    return { ok: false as const, reason: "too-many" as const }
+  }
+
+  const nextPosition =
+    chat.documents.reduce(
+      (highest, link) => Math.max(highest, link.position),
+      -1
+    ) + 1
+
+  await db.chatDocument.createMany({
+    data: incoming.map((documentId, offset) => ({
+      chatId: chat.id,
+      documentId,
+      position: nextPosition + offset,
+    })),
+  })
+
+  return {
+    ok: true as const,
+    attached: incoming.length,
+    alreadyAttached: documentIds.length - incoming.length,
+  }
 }

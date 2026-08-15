@@ -38,7 +38,7 @@ export default async function ChatPage({ params }: ChatPageProps) {
       <ChatHeader
         user={session.user}
         title={chat.title}
-        documentCount={chat.documentCount}
+        documentCount={chat.documents.length}
       />
       <ChatConversation chat={chat} />
     </>

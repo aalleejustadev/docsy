@@ -31,16 +31,16 @@ function LibraryPickerDialog({
   open,
   onOpenChange,
   onAdd,
-  documents,
-  addedIds,
+  documents = [],
+  addedIds = [],
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   onAdd: (documents: LibraryDocumentView[]) => void
   /** Everything this workspace has uploaded, newest first. */
-  documents: LibraryDocumentView[]
+  documents?: LibraryDocumentView[]
   /** Already in this chat — shown checked-off rather than offered again. */
-  addedIds: string[]
+  addedIds?: string[]
 }) {
   const [selected, setSelected] = React.useState<string[]>([])
 
