@@ -32,7 +32,11 @@ function AnswerActions({
 
   async function copy() {
     try {
-      await navigator.clipboard.writeText(content)
+      // Markers are stored as `[1:0]` so a click can find the exact passage.
+      // The passage half is plumbing — what gets copied reads as `[1]`.
+      await navigator.clipboard.writeText(
+        content.replace(/\[(\d+):\d+\]/g, "[$1]")
+      )
       setCopied(true)
       toast.add({ title: "Answer copied to your clipboard." })
       window.setTimeout(() => setCopied(false), 2000)

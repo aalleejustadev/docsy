@@ -16,7 +16,7 @@ import {
   getChatDocuments,
   getChatHistory,
 } from "@/lib/chat-store"
-import { toDocumentBlock } from "@/lib/documents"
+import { toDocumentBlock, type DocumentPayload } from "@/lib/documents"
 
 /** Reading a long brief and writing the briefing takes minutes, not seconds. */
 export const maxDuration = 300
@@ -31,37 +31,93 @@ type StreamEvent =
   | { type: "done"; sources: ChatSource[]; messageId: string }
   | { type: "error"; value: string }
 
+/** Words of document text kept either side of a quote, for context. */
+const CONTEXT_CHARS = 320
+
+/** Trims a context slice back to a word boundary so it doesn't start mid-word. */
+function trimToWord(text: string, from: "start" | "end") {
+  if (from === "start") {
+    const space = text.indexOf(" ")
+    return space > 0 && space < 40 ? text.slice(space + 1) : text
+  }
+
+  const space = text.lastIndexOf(" ")
+  return space > text.length - 40 ? text.slice(0, space) : text
+}
+
 /**
- * Numbers a citation, reusing the index when the same place is cited twice.
+ * Numbers a citation and records the passage behind it.
  *
- * Claude returns these attached to the text they support, so `sources` ends up
- * ordered by first appearance — which is what makes the `[n]` markers read in
- * sequence down the answer.
+ * Sources are keyed by document and page rather than by passage, so an answer
+ * that leans on the same page twenty times still reads `[1]` rather than
+ * `[1]…[20]`. Each distinct quote is appended to that source's `passages`,
+ * which is what the source reader highlights.
  */
 function resolveCitation(
   citation: Anthropic.Beta.Messages.BetaTextCitation,
+  documents: DocumentPayload[],
   sources: ChatSource[],
   indexByKey: Map<string, number>
-): ChatSource | null {
+): { source: ChatSource; passage: number } | null {
   // Web-search citations can't occur here — we only ever send documents — but
   // the union includes them, and they carry no document title.
   if (!("document_title" in citation)) return null
 
-  const document = citation.document_title ?? "Document"
+  const origin = documents[citation.document_index]
+  const document = citation.document_title ?? origin?.name ?? "Document"
   const page =
     citation.type === "page_location" ? citation.start_page_number : null
   const key = `${document}#${page ?? ""}`
 
-  const existing = indexByKey.get(key)
-  if (existing) {
-    return sources[existing - 1]
+  let source = sources.find(
+    (candidate) => candidate.index === indexByKey.get(key)
+  )
+
+  if (!source) {
+    source = {
+      index: sources.length + 1,
+      documentId: origin?.id ?? null,
+      document,
+      page,
+      passages: [],
+    }
+    sources.push(source)
+    indexByKey.set(key, source.index)
   }
 
-  const source: ChatSource = { index: sources.length + 1, document, page }
-  sources.push(source)
-  indexByKey.set(key, source.index)
+  const text = citation.cited_text.trim()
 
-  return source
+  // Context only exists for documents whose text we extracted. A PDF goes to
+  // Claude as bytes, so there's nothing on our side to read around the quote.
+  let before: string | null = null
+  let after: string | null = null
+
+  if (citation.type === "char_location" && origin?.text) {
+    before = trimToWord(
+      origin.text.slice(
+        Math.max(0, citation.start_char_index - CONTEXT_CHARS),
+        citation.start_char_index
+      ),
+      "start"
+    )
+    after = trimToWord(
+      origin.text.slice(
+        citation.end_char_index,
+        citation.end_char_index + CONTEXT_CHARS
+      ),
+      "end"
+    )
+  }
+
+  // Capped so a long answer can't bloat the stored JSON, and de-duplicated
+  // because Claude often cites the same sentence for several claims.
+  let passage = source.passages.findIndex((entry) => entry.text === text)
+
+  if (passage === -1 && source.passages.length < 12) {
+    passage = source.passages.push({ text, before, after }) - 1
+  }
+
+  return { source, passage }
 }
 
 /**
@@ -174,7 +230,7 @@ export async function POST(
           messages,
         })
 
-        let blockCitations: ChatSource[] = []
+        let blockCitations: string[] = []
 
         for await (const event of claude) {
           if (
@@ -190,17 +246,24 @@ export async function POST(
             }
 
             if (event.delta.type === "citations_delta") {
-              const source = resolveCitation(
+              const resolved = resolveCitation(
                 event.delta.citation,
+                documents,
                 sources,
                 indexByKey
               )
 
-              if (
-                source &&
-                !blockCitations.some((cited) => cited.index === source.index)
-              ) {
-                blockCitations.push(source)
+              if (resolved) {
+                // `[1:0]` is source 1, passage 0. A passage that overflowed the
+                // cap degrades to a bare `[1]`, which still opens the document.
+                const marker =
+                  resolved.passage === -1
+                    ? `[${resolved.source.index}]`
+                    : `[${resolved.source.index}:${resolved.passage}]`
+
+                if (!blockCitations.includes(marker)) {
+                  blockCitations.push(marker)
+                }
               }
             }
           }
@@ -208,7 +271,7 @@ export async function POST(
           // Markers land after the sentence they support, which is where the
           // reference reads naturally: "…60 days' notice [1]."
           if (event.type === "content_block_stop" && blockCitations.length) {
-            push(blockCitations.map((cited) => `[${cited.index}]`).join(""))
+            push(blockCitations.join(""))
             blockCitations = []
           }
         }

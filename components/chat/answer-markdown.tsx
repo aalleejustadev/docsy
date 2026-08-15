@@ -23,8 +23,13 @@ type HastNode = {
 }
 
 /**
- * Turns the `[1]` markers written into the text by the streaming route into
+ * Turns the citation markers written into the text by the streaming route into
  * real `<sup>` elements.
+ *
+ * The stream writes `[1:0]` — source 1, passage 0 — so a click can open the
+ * exact quote rather than just the document. Only `[1]` is ever rendered; the
+ * passage rides along as a data attribute. Markers from before passages were
+ * recorded are plain `[1]` and still work, just without a passage.
  *
  * It runs on the parsed tree rather than the raw string so a marker inside a
  * heading, list item or bold run is caught too — and so it can never touch
@@ -47,15 +52,23 @@ function rehypeCitations() {
           continue
         }
 
-        for (const part of child.value.split(/(\[\d+\])/g)) {
+        for (const part of child.value.split(/(\[\d+(?::\d+)?\])/g)) {
           if (!part) continue
 
-          if (/^\[\d+\]$/.test(part)) {
+          const marker = /^\[(\d+)(?::(\d+))?\]$/.exec(part)
+
+          if (marker) {
             next.push({
               type: "element",
               tagName: "sup",
-              properties: { className: ["citation"] },
-              children: [{ type: "text", value: part }],
+              properties: {
+                className: ["citation"],
+                "data-source": marker[1],
+                ...(marker[2] === undefined
+                  ? {}
+                  : { "data-passage": marker[2] }),
+              },
+              children: [{ type: "text", value: `[${marker[1]}]` }],
             })
           } else {
             next.push({ type: "text", value: part })
@@ -91,110 +104,160 @@ function omitNode<T extends { node?: unknown }>(props: T) {
  * `first:mt-0` throughout so a block that opens the answer doesn't push itself
  * away from the Docsy label above it.
  */
-const components = {
-  // Claude is told to start at `##`, but a stray `#` shouldn't outrank the
-  // page's own heading, so both land on the same level.
-  h1: (props: MarkdownProps<"h1">) => (
-    <h2
-      className="mt-6 mb-2 text-lg font-bold tracking-tight first:mt-0"
-      {...omitNode(props)}
-    />
-  ),
-  h2: (props: MarkdownProps<"h2">) => (
-    <h2
-      className="mt-6 mb-2 text-lg font-bold tracking-tight first:mt-0"
-      {...omitNode(props)}
-    />
-  ),
-  h3: (props: MarkdownProps<"h3">) => (
-    <h3 className="mt-5 mb-1.5 font-semibold first:mt-0" {...omitNode(props)} />
-  ),
-  h4: (props: MarkdownProps<"h4">) => (
-    <h4 className="mt-4 mb-1.5 font-semibold first:mt-0" {...omitNode(props)} />
-  ),
-  p: (props: MarkdownProps<"p">) => (
-    <p
-      className="my-3 leading-relaxed first:mt-0 last:mb-0"
-      {...omitNode(props)}
-    />
-  ),
-  ul: (props: MarkdownProps<"ul">) => (
-    <ul
-      className="my-3 ml-5 list-disc first:mt-0 last:mb-0"
-      {...omitNode(props)}
-    />
-  ),
-  ol: (props: MarkdownProps<"ol">) => (
-    <ol
-      className="my-3 ml-5 list-decimal first:mt-0 last:mb-0"
-      {...omitNode(props)}
-    />
-  ),
-  li: (props: MarkdownProps<"li">) => (
-    <li className="mt-1.5 leading-relaxed" {...omitNode(props)} />
-  ),
-  strong: (props: MarkdownProps<"strong">) => (
-    <strong className="font-semibold" {...omitNode(props)} />
-  ),
-  blockquote: (props: MarkdownProps<"blockquote">) => (
-    <blockquote
-      className="my-3 border-s-2 ps-4 text-muted-foreground italic"
-      {...omitNode(props)}
-    />
-  ),
-  hr: () => <Separator className="my-6" />,
-  // Every link opens in a new tab so a click never loses the thread. The
-  // `rel` is the safety half of that: `noopener` denies the opened page a
-  // handle back onto this one, `noreferrer` withholds the referrer. Both are
-  // applied after the spread so a link in an answer can't override them.
-  a: (props: MarkdownProps<"a">) => (
-    <a
-      className="underline underline-offset-4 hover:text-primary"
-      {...omitNode(props)}
-      target="_blank"
-      rel="noreferrer noopener"
-    />
-  ),
-  code: (props: MarkdownProps<"code">) => (
-    <code
-      className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]"
-      {...omitNode(props)}
-    />
-  ),
-  pre: (props: MarkdownProps<"pre">) => (
-    <pre
-      className="my-3 overflow-x-auto rounded-lg bg-muted p-3 text-sm [&_code]:bg-transparent [&_code]:p-0"
-      {...omitNode(props)}
-    />
-  ),
-  // Wide tables scroll inside their own container rather than stretching the
-  // message column.
-  table: (props: MarkdownProps<"table">) => (
-    <div className="my-3 overflow-x-auto rounded-lg border">
-      <table className="w-full text-sm" {...omitNode(props)} />
-    </div>
-  ),
-  th: (props: MarkdownProps<"th">) => (
-    <th
-      className="border-b bg-surface px-3 py-2 text-left font-semibold"
-      {...omitNode(props)}
-    />
-  ),
-  td: (props: MarkdownProps<"td">) => (
-    <td
-      className="border-b px-3 py-2 align-top last:border-0"
-      {...omitNode(props)}
-    />
-  ),
-  sup: (props: MarkdownProps<"sup">) => (
-    <sup
-      className="ml-0.5 font-mono text-[0.625rem] font-semibold text-brand"
-      {...omitNode(props)}
-    />
-  ),
+function createComponents(
+  onCitationSelect?: (source: number, passage: number | null) => void
+) {
+  return {
+    // Claude is told to start at `##`, but a stray `#` shouldn't outrank the
+    // page's own heading, so both land on the same level.
+    h1: (props: MarkdownProps<"h1">) => (
+      <h2
+        className="mt-6 mb-2 text-lg font-bold tracking-tight first:mt-0"
+        {...omitNode(props)}
+      />
+    ),
+    h2: (props: MarkdownProps<"h2">) => (
+      <h2
+        className="mt-6 mb-2 text-lg font-bold tracking-tight first:mt-0"
+        {...omitNode(props)}
+      />
+    ),
+    h3: (props: MarkdownProps<"h3">) => (
+      <h3
+        className="mt-5 mb-1.5 font-semibold first:mt-0"
+        {...omitNode(props)}
+      />
+    ),
+    h4: (props: MarkdownProps<"h4">) => (
+      <h4
+        className="mt-4 mb-1.5 font-semibold first:mt-0"
+        {...omitNode(props)}
+      />
+    ),
+    p: (props: MarkdownProps<"p">) => (
+      <p
+        className="my-3 leading-relaxed first:mt-0 last:mb-0"
+        {...omitNode(props)}
+      />
+    ),
+    ul: (props: MarkdownProps<"ul">) => (
+      <ul
+        className="my-3 ml-5 list-disc first:mt-0 last:mb-0"
+        {...omitNode(props)}
+      />
+    ),
+    ol: (props: MarkdownProps<"ol">) => (
+      <ol
+        className="my-3 ml-5 list-decimal first:mt-0 last:mb-0"
+        {...omitNode(props)}
+      />
+    ),
+    li: (props: MarkdownProps<"li">) => (
+      <li className="mt-1.5 leading-relaxed" {...omitNode(props)} />
+    ),
+    strong: (props: MarkdownProps<"strong">) => (
+      <strong className="font-semibold" {...omitNode(props)} />
+    ),
+    blockquote: (props: MarkdownProps<"blockquote">) => (
+      <blockquote
+        className="my-3 border-s-2 ps-4 text-muted-foreground italic"
+        {...omitNode(props)}
+      />
+    ),
+    hr: () => <Separator className="my-6" />,
+    // Every link opens in a new tab so a click never loses the thread. The
+    // `rel` is the safety half of that: `noopener` denies the opened page a
+    // handle back onto this one, `noreferrer` withholds the referrer. Both are
+    // applied after the spread so a link in an answer can't override them.
+    a: (props: MarkdownProps<"a">) => (
+      <a
+        className="underline underline-offset-4 hover:text-primary"
+        {...omitNode(props)}
+        target="_blank"
+        rel="noreferrer noopener"
+      />
+    ),
+    code: (props: MarkdownProps<"code">) => (
+      <code
+        className="rounded bg-muted px-1 py-0.5 font-mono text-[0.85em]"
+        {...omitNode(props)}
+      />
+    ),
+    pre: (props: MarkdownProps<"pre">) => (
+      <pre
+        className="my-3 overflow-x-auto rounded-lg bg-muted p-3 text-sm [&_code]:bg-transparent [&_code]:p-0"
+        {...omitNode(props)}
+      />
+    ),
+    // Wide tables scroll inside their own container rather than stretching the
+    // message column.
+    table: (props: MarkdownProps<"table">) => (
+      <div className="my-3 overflow-x-auto rounded-lg border">
+        <table className="w-full text-sm" {...omitNode(props)} />
+      </div>
+    ),
+    th: (props: MarkdownProps<"th">) => (
+      <th
+        className="border-b bg-surface px-3 py-2 text-left font-semibold"
+        {...omitNode(props)}
+      />
+    ),
+    td: (props: MarkdownProps<"td">) => (
+      <td
+        className="border-b px-3 py-2 align-top last:border-0"
+        {...omitNode(props)}
+      />
+    ),
+    // A citation marker is a control when something can act on it: clicking
+    // `[1]` opens the passage behind that specific marker in the source reader.
+    sup: ({ children, ...props }: MarkdownProps<"sup">) => {
+      const rest = omitNode(props) as Record<string, unknown>
+      const source = Number(rest["data-source"])
+      const rawPassage = rest["data-passage"]
+      const passage = rawPassage === undefined ? null : Number(rawPassage)
+
+      if (!onCitationSelect || Number.isNaN(source)) {
+        return (
+          <sup
+            className="ml-0.5 font-mono text-[0.625rem] font-semibold text-brand"
+            {...rest}
+          >
+            {children}
+          </sup>
+        )
+      }
+
+      return (
+        <sup className="ml-0.5">
+          <button
+            type="button"
+            onClick={() => onCitationSelect(source, passage)}
+            aria-label={`Read the passage behind citation ${source}`}
+            data-source={source}
+            data-passage={passage ?? undefined}
+            className="cursor-pointer rounded-sm font-mono text-[0.625rem] font-semibold text-brand underline-offset-2 hover:underline focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none"
+          >
+            {children}
+          </button>
+        </sup>
+      )
+    },
+  }
 }
 
-function AnswerMarkdown({ children }: { children: string }) {
+function AnswerMarkdown({
+  children,
+  onCitationSelect,
+}: {
+  children: string
+  /** Omitted while an answer streams — its sources aren't resolved yet. */
+  onCitationSelect?: (source: number, passage: number | null) => void
+}) {
+  const components = React.useMemo(
+    () => createComponents(onCitationSelect),
+    [onCitationSelect]
+  )
+
   return (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}

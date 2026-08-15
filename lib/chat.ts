@@ -38,12 +38,28 @@ export type LibraryDocumentView = {
   status: DocumentStatusView
 }
 
+/** One passage Claude quoted, with the document text either side of it. */
+export type ChatSourcePassage = {
+  /** The exact wording cited — highlighted in the source reader. */
+  text: string
+  /**
+   * Surrounding text, so the quote can be read in context. Null for PDFs,
+   * whose text we never extract — Claude reads those natively.
+   */
+  before: string | null
+  after: string | null
+}
+
 /** One resolved citation behind an answer's `[n]` marker. */
 export type ChatSource = {
   index: number
+  /** Null on answers written before documents were linked to citations. */
+  documentId: string | null
   document: string
   /** Null for formats without pages, like markdown or a plain-text brief. */
   page: number | null
+  /** Every area of this source the answer leaned on, in the order cited. */
+  passages: ChatSourcePassage[]
 }
 
 /** How an answer was rated, or null while nobody has said. */

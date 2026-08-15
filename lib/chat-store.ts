@@ -74,6 +74,23 @@ export async function listLibraryDocuments(
   }))
 }
 
+/**
+ * Sources are JSON, and rows written before the source reader existed carry
+ * only `{ index, document, page }`. Reading them back through here means the
+ * panel never has to guard for missing fields.
+ */
+function normaliseSources(value: unknown): ChatSource[] {
+  if (!Array.isArray(value)) return []
+
+  return (value as Partial<ChatSource>[]).map((source, position) => ({
+    index: source.index ?? position + 1,
+    documentId: source.documentId ?? null,
+    document: source.document ?? "Document",
+    page: source.page ?? null,
+    passages: source.passages ?? [],
+  }))
+}
+
 function toMessageView(message: {
   id: string
   role: "USER" | "ASSISTANT"
@@ -85,7 +102,7 @@ function toMessageView(message: {
     id: message.id,
     role: message.role === "USER" ? "user" : "assistant",
     content: message.content,
-    sources: (message.sources as ChatSource[] | null) ?? [],
+    sources: normaliseSources(message.sources),
     feedback: message.feedback,
   }
 }
@@ -145,7 +162,13 @@ export async function getChatDocuments(
     orderBy: { position: "asc" },
     select: {
       document: {
-        select: { name: true, contentType: true, data: true, text: true },
+        select: {
+          id: true,
+          name: true,
+          contentType: true,
+          data: true,
+          text: true,
+        },
       },
     },
   })
@@ -266,4 +289,53 @@ export async function setMessageFeedback({
   })
 
   return result.count > 0
+}
+
+/**
+ * Deletes a chat and cleans up after it.
+ *
+ * Messages and the document links cascade from the schema. The documents
+ * themselves are only removed when nothing else points at them: the library is
+ * workspace-wide and the picker lets one brief be used by several chats, so
+ * deleting a shared document here would silently break the other chats that
+ * still cite it.
+ *
+ * Returns null when the chat isn't this workspace's, so the caller can 404
+ * rather than reporting a deletion that never happened.
+ */
+export async function deleteChat(chatId: string, organizationId: string) {
+  const chat = await db.chat.findFirst({
+    where: { id: chatId, organizationId },
+    select: { id: true, documents: { select: { documentId: true } } },
+  })
+
+  if (!chat) return null
+
+  const documentIds = chat.documents.map((link) => link.documentId)
+
+  return db.$transaction(async (tx) => {
+    // Removing the chat first drops its `chatDocument` rows, which is what
+    // makes the "is anything still using this?" count below meaningful.
+    await tx.chat.delete({ where: { id: chat.id } })
+
+    const stillLinked = await tx.chatDocument.findMany({
+      where: { documentId: { in: documentIds } },
+      select: { documentId: true },
+      distinct: ["documentId"],
+    })
+
+    const shared = new Set(stillLinked.map((link) => link.documentId))
+    const orphaned = documentIds.filter((id) => !shared.has(id))
+
+    if (orphaned.length > 0) {
+      await tx.document.deleteMany({
+        where: { id: { in: orphaned }, organizationId },
+      })
+    }
+
+    return {
+      deletedDocuments: orphaned.length,
+      keptSharedDocuments: documentIds.length - orphaned.length,
+    }
+  })
 }

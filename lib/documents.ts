@@ -109,6 +109,7 @@ export function documentMeta(sizeBytes: number, pageCount: number | null) {
 
 /** The columns needed to hand a stored document to Claude. */
 export type DocumentPayload = {
+  id: string
   name: string
   contentType: string
   data: Uint8Array

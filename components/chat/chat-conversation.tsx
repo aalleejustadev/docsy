@@ -31,21 +31,42 @@ import { Separator } from "@/components/ui/separator"
 import { DocsyMark } from "@/components/brand/docsy-logo"
 import { TypingDots } from "@/components/common/typing-dots"
 import { AnswerActions } from "@/components/chat/answer-actions"
+import {
+  SourceReader,
+  type ActiveCitation,
+} from "@/components/chat/source-reader"
 import { AnswerMarkdown } from "@/components/chat/answer-markdown"
 import { ChatComposer } from "@/components/chat/chat-composer"
 
 function AnswerBody({
   content,
   sources,
+  onSelectSource,
 }: {
   content: string
   sources: ChatSource[]
+  /** Omitted while streaming, when the sources aren't resolved yet. */
+  onSelectSource?: (citation: ActiveCitation) => void
 }) {
+  // A marker addresses a source by number and a passage by position; both have
+  // to be resolved against this answer's own sources before the reader can
+  // show anything.
+  const selectByMarker = React.useMemo(() => {
+    if (!onSelectSource) return undefined
+
+    return (index: number, passage: number | null) => {
+      const source = sources.find((candidate) => candidate.index === index)
+      if (source) onSelectSource({ source, passage })
+    }
+  }, [sources, onSelectSource])
+
   return (
     <>
       <Bubble variant="ghost">
         <BubbleContent className="text-base">
-          <AnswerMarkdown>{content}</AnswerMarkdown>
+          <AnswerMarkdown onCitationSelect={selectByMarker}>
+            {content}
+          </AnswerMarkdown>
         </BubbleContent>
       </Bubble>
 
@@ -59,16 +80,19 @@ function AnswerBody({
             </span>
 
             {sources.map((source) => (
-              <span
+              <button
                 key={source.index}
-                className="flex items-center gap-2 rounded-lg border bg-surface px-2.5 py-1.5 text-sm"
+                type="button"
+                onClick={() => onSelectSource?.({ source, passage: 0 })}
+                disabled={!onSelectSource}
+                className="flex cursor-pointer items-center gap-2 rounded-lg border bg-surface px-2.5 py-1.5 text-sm transition-colors hover:border-brand disabled:cursor-default disabled:hover:border-border"
               >
                 <span className="font-mono text-xs font-semibold text-brand">
                   [{source.index}]
                 </span>
                 {source.document}
                 {source.page !== null && ` · p.${source.page}`}
-              </span>
+              </button>
             ))}
           </div>
         </>
@@ -106,9 +130,11 @@ function AssistantTurn({
 function ChatTurn({
   message,
   chatId,
+  onSelectSource,
 }: {
   message: ChatMessageView
   chatId: string
+  onSelectSource: (citation: ActiveCitation) => void
 }) {
   if (message.role === "user") {
     return (
@@ -135,7 +161,11 @@ function ChatTurn({
         />
       }
     >
-      <AnswerBody content={message.content} sources={message.sources} />
+      <AnswerBody
+        content={message.content}
+        sources={message.sources}
+        onSelectSource={onSelectSource}
+      />
     </AssistantTurn>
   )
 }
@@ -147,6 +177,14 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
   const [streamed, setStreamed] = React.useState("")
   const [isAnswering, setIsAnswering] = React.useState(chat.pendingAnswer)
   const [error, setError] = React.useState<string | null>(null)
+  const [activeCitation, setActiveCitation] =
+    React.useState<ActiveCitation | null>(() => {
+      const source = [...chat.messages]
+        .reverse()
+        .find((message) => message.sources.length > 0)?.sources[0]
+
+      return source ? { source, passage: 0 } : null
+    })
 
   // React 18 mounts effects twice in dev; without this the seeded analysis
   // would be requested — and billed — twice on every load.
@@ -216,6 +254,10 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
               ])
               setStreamed("")
               setIsAnswering(false)
+              const answered = event.sources as ChatSource[]
+              if (answered.length > 0) {
+                setActiveCitation({ source: answered[0], passage: 0 })
+              }
               // Pulls the saved ids and re-sorts the sidebar.
               router.refresh()
               return
@@ -257,98 +299,106 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <MessageScrollerProvider autoScroll>
-        <MessageScroller className="flex-1">
-          {/* The viewport is `tabindex=0` so it can be arrow-scrolled, which
+    <div className="flex min-h-0 flex-1">
+      <div className="flex min-w-0 flex-1 flex-col">
+        <MessageScrollerProvider autoScroll>
+          <MessageScroller className="flex-1">
+            {/* The viewport is `tabindex=0` so it can be arrow-scrolled, which
               means the browser rings the whole pane once it takes focus. The
               ring is dropped here — it reads as a stray border around the
               thread, and every control inside keeps its own focus ring. */}
-          <MessageScrollerViewport className="px-6 outline-none">
-            <MessageScrollerContent className="mx-auto w-full max-w-3xl py-8">
-              {messages.map((message) => (
-                <MessageScrollerItem
-                  key={message.id}
-                  messageId={message.id}
-                  scrollAnchor={message.role === "user"}
-                >
-                  <ChatTurn message={message} chatId={chat.id} />
-                </MessageScrollerItem>
-              ))}
+            <MessageScrollerViewport className="px-6 outline-none">
+              <MessageScrollerContent className="mx-auto w-full max-w-3xl py-8">
+                {messages.map((message) => (
+                  <MessageScrollerItem
+                    key={message.id}
+                    messageId={message.id}
+                    scrollAnchor={message.role === "user"}
+                  >
+                    <ChatTurn
+                      message={message}
+                      chatId={chat.id}
+                      onSelectSource={setActiveCitation}
+                    />
+                  </MessageScrollerItem>
+                ))}
 
-              {isAnswering && (
-                <MessageScrollerItem messageId="answering">
-                  <AssistantTurn>
-                    {streamed ? (
-                      <AnswerBody content={streamed} sources={[]} />
-                    ) : (
-                      <Bubble variant="ghost">
-                        <BubbleContent className="flex items-center gap-2 text-sm text-muted-foreground">
-                          Reading your document
-                          <TypingDots />
-                        </BubbleContent>
-                      </Bubble>
-                    )}
-                  </AssistantTurn>
-                </MessageScrollerItem>
-              )}
+                {isAnswering && (
+                  <MessageScrollerItem messageId="answering">
+                    <AssistantTurn>
+                      {streamed ? (
+                        <AnswerBody content={streamed} sources={[]} />
+                      ) : (
+                        <Bubble variant="ghost">
+                          <BubbleContent className="flex items-center gap-2 text-sm text-muted-foreground">
+                            Reading your document
+                            <TypingDots />
+                          </BubbleContent>
+                        </Bubble>
+                      )}
+                    </AssistantTurn>
+                  </MessageScrollerItem>
+                )}
 
-              {error && (
-                <MessageScrollerItem messageId="error">
-                  <Alert variant="destructive">
-                    <AlertTitle>Docsy couldn&apos;t answer</AlertTitle>
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                </MessageScrollerItem>
-              )}
-            </MessageScrollerContent>
-          </MessageScrollerViewport>
+                {error && (
+                  <MessageScrollerItem messageId="error">
+                    <Alert variant="destructive">
+                      <AlertTitle>Docsy couldn&apos;t answer</AlertTitle>
+                      <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                  </MessageScrollerItem>
+                )}
+              </MessageScrollerContent>
+            </MessageScrollerViewport>
 
-          <MessageScrollerButton />
-        </MessageScroller>
-      </MessageScrollerProvider>
+            <MessageScrollerButton />
+          </MessageScroller>
+        </MessageScrollerProvider>
 
-      <div className="shrink-0 px-6 pb-4">
-        <div className="mx-auto w-full max-w-3xl">
-          <ChatComposer
-            tone="outline"
-            disabled={isAnswering}
-            onSend={ask}
-            placeholder="Ask a follow-up about your documents…"
-            footer={
-              <>
-                <InputGroupButton
-                  size="icon-sm"
-                  variant="ghost"
-                  className="cursor-pointer"
-                  aria-label="Attach a document"
-                >
-                  <PaperclipIcon />
-                </InputGroupButton>
+        <div className="shrink-0 px-6 pb-4">
+          <div className="mx-auto w-full max-w-3xl">
+            <ChatComposer
+              tone="outline"
+              disabled={isAnswering}
+              onSend={ask}
+              placeholder="Ask a follow-up about your documents…"
+              footer={
+                <>
+                  <InputGroupButton
+                    size="icon-sm"
+                    variant="ghost"
+                    className="cursor-pointer"
+                    aria-label="Attach a document"
+                  >
+                    <PaperclipIcon />
+                  </InputGroupButton>
 
-                <InputGroupButton
-                  variant="outline"
-                  className="cursor-pointer"
-                  aria-label="Choose which documents to search"
-                >
-                  <LayersIcon />
-                  All {chat.documentCount}{" "}
-                  {chat.documentCount === 1 ? "document" : "documents"}
-                  <ChevronDownIcon />
-                </InputGroupButton>
+                  <InputGroupButton
+                    variant="outline"
+                    className="cursor-pointer"
+                    aria-label="Choose which documents to search"
+                  >
+                    <LayersIcon />
+                    All {chat.documentCount}{" "}
+                    {chat.documentCount === 1 ? "document" : "documents"}
+                    <ChevronDownIcon />
+                  </InputGroupButton>
 
-                <span className="ml-auto font-mono text-xs text-muted-foreground">
-                  {chat.questionsUsed} / {MONTHLY_QUESTION_LIMIT} questions
-                </span>
-              </>
-            }
-          />
+                  <span className="ml-auto font-mono text-xs text-muted-foreground">
+                    {chat.questionsUsed} / {MONTHLY_QUESTION_LIMIT} questions
+                  </span>
+                </>
+              }
+            />
 
-          <p className="mt-2 text-center text-xs text-muted-foreground">
-            Docsy answers only from your documents and cites every claim.
-          </p>
+            <p className="mt-2 text-center text-xs text-muted-foreground">
+              Docsy answers only from your documents and cites every claim.
+            </p>
+          </div>
         </div>
       </div>
+
+      <SourceReader citation={activeCitation} />
     </div>
   )
 }
