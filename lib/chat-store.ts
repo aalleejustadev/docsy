@@ -1,7 +1,7 @@
 import { cache } from "react"
 
 import { db } from "@/lib/db"
-import { toPlainText } from "@/lib/chat"
+import { MONTHLY_QUESTION_LIMIT, toPlainText } from "@/lib/chat"
 import type {
   ChatDetail,
   ChatMessageView,
@@ -20,6 +20,12 @@ import {
   type LibraryStatusFilter,
 } from "@/lib/library"
 import { clampPage } from "@/lib/pagination"
+import {
+  usagePeriod,
+  USAGE_CHART_DAYS,
+  USAGE_TOP_DOCUMENTS,
+  type UsageView,
+} from "@/lib/usage"
 import {
   scorePassage,
   SEARCH_PAGE_SIZE,
@@ -375,6 +381,163 @@ export const searchPassages = cache(async function searchPassages(
     pageCount,
   }
 })
+
+/** Local `YYYY-MM-DD` — the day a question reads as to the person who asked it. */
+function localDay(date: Date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`
+}
+
+/**
+ * Everything the usage page reports — `ui-design/dashboard/light/usage-page.png`.
+ *
+ * Every figure is measured, including the two that look like they'd need
+ * instrumentation:
+ *
+ * - **Answer time** is the gap between a question's row and the row of the
+ *   answer to it. The question is written when the request arrives and the
+ *   answer when its stream finishes, so the difference is the wall-clock time
+ *   the developer actually waited. Seeded analyses are excluded: their question
+ *   is written when the chat is created and answered whenever the page is next
+ *   opened, which could be days.
+ * - **Most-questioned documents** counts answers that *cited* the document, not
+ *   answers in chats that happen to include it. A chat with four documents
+ *   would otherwise credit every question to all four.
+ */
+export async function getUsage(organizationId: string): Promise<UsageView> {
+  const now = new Date()
+  const period = usagePeriod(now)
+  const monthStart = new Date(period.start)
+
+  const chartStart = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate() - (USAGE_CHART_DAYS - 1)
+  )
+
+  const [documentsIndexed, questions, recent, answers, documents] =
+    await Promise.all([
+      db.document.count({ where: { organizationId, status: "READY" } }),
+      countQuestionsThisMonth(organizationId),
+      // Everything needed to chart the last fortnight and to time the answers
+      // given this month — whichever window starts earlier.
+      db.message.findMany({
+        where: {
+          chat: { organizationId },
+          createdAt: { gte: chartStart < monthStart ? chartStart : monthStart },
+        },
+        orderBy: { createdAt: "asc" },
+        select: {
+          chatId: true,
+          role: true,
+          hidden: true,
+          createdAt: true,
+        },
+      }),
+      db.message.findMany({
+        where: { chat: { organizationId }, role: "ASSISTANT" },
+        select: { sources: true },
+      }),
+      db.document.findMany({
+        where: { organizationId },
+        select: { id: true, name: true },
+      }),
+    ])
+
+  // --- Questions per day -------------------------------------------------
+  const perDay = new Map<string, number>()
+
+  for (let offset = 0; offset < USAGE_CHART_DAYS; offset += 1) {
+    const day = new Date(
+      chartStart.getFullYear(),
+      chartStart.getMonth(),
+      chartStart.getDate() + offset
+    )
+    perDay.set(localDay(day), 0)
+  }
+
+  for (const message of recent) {
+    if (message.role !== "USER" || message.hidden) continue
+
+    const key = localDay(message.createdAt)
+    // Only days inside the window; the query reaches further back for timings.
+    if (perDay.has(key)) perDay.set(key, (perDay.get(key) ?? 0) + 1)
+  }
+
+  // --- Answer time -------------------------------------------------------
+  const pendingByChat = new Map<string, Date>()
+  const durations: number[] = []
+
+  for (const message of recent) {
+    if (message.role === "USER") {
+      // Hidden questions clear any pending one: the answer that follows is to
+      // the seed, not to whatever came before it.
+      pendingByChat.delete(message.chatId)
+      if (!message.hidden) pendingByChat.set(message.chatId, message.createdAt)
+      continue
+    }
+
+    const asked = pendingByChat.get(message.chatId)
+    if (!asked) continue
+
+    pendingByChat.delete(message.chatId)
+
+    if (message.createdAt >= monthStart) {
+      durations.push((message.createdAt.getTime() - asked.getTime()) / 1000)
+    }
+  }
+
+  // --- Citations, and which documents earned them ------------------------
+  const nameById = new Map(
+    documents.map((document) => [document.id, document.name])
+  )
+  const citationsByDocument = new Map<string, number>()
+  let citations = 0
+
+  for (const answer of answers) {
+    if (!Array.isArray(answer.sources)) continue
+
+    const cited = new Set<string>()
+
+    for (const source of answer.sources as { documentId?: string | null }[]) {
+      citations += 1
+      if (source?.documentId) cited.add(source.documentId)
+    }
+
+    for (const documentId of cited) {
+      citationsByDocument.set(
+        documentId,
+        (citationsByDocument.get(documentId) ?? 0) + 1
+      )
+    }
+  }
+
+  return {
+    period,
+    questions,
+    questionLimit: MONTHLY_QUESTION_LIMIT,
+    documentsIndexed,
+    citations,
+    averageAnswerSeconds:
+      durations.length > 0
+        ? durations.reduce((sum, value) => sum + value, 0) / durations.length
+        : null,
+    days: [...perDay.entries()].map(([date, count]) => ({
+      date,
+      questions: count,
+    })),
+    documents: [...citationsByDocument.entries()]
+      // A deleted document keeps its citations in old answers but has no name
+      // to show, so it drops out of the list rather than appearing as "".
+      .filter(([documentId]) => nameById.has(documentId))
+      .map(([documentId, count]) => ({
+        id: documentId,
+        name: nameById.get(documentId)!,
+        questions: count,
+      }))
+      .sort((a, b) => b.questions - a.questions || a.name.localeCompare(b.name))
+      .slice(0, USAGE_TOP_DOCUMENTS),
+  }
+}
 
 /**
  * Removes a document from the library for good.
