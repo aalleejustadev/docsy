@@ -24,6 +24,7 @@ const COMPOSER_TONES = {
  */
 function ChatComposer({
   placeholder,
+  defaultValue = "",
   disabled = false,
   tone = "filled",
   footer,
@@ -31,6 +32,8 @@ function ChatComposer({
   className,
 }: {
   placeholder: string
+  /** Prefills the box — a question carried in from the command palette. */
+  defaultValue?: string
   disabled?: boolean
   tone?: keyof typeof COMPOSER_TONES
   /** Controls left of the send button, on their own row. */
@@ -38,7 +41,7 @@ function ChatComposer({
   onSend?: (question: string) => void
   className?: string
 }) {
-  const [value, setValue] = React.useState("")
+  const [value, setValue] = React.useState(defaultValue)
   const canSend = !disabled && value.trim().length > 0
 
   function send() {

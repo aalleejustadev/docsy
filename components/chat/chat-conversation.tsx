@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { PaperclipIcon } from "lucide-react"
 
 import {
@@ -175,6 +175,9 @@ function ChatTurn({
 /** An open chat — `ui-design/dashboard/light/chat-page-chat.png`. */
 function ChatConversation({ chat }: { chat: ChatDetail }) {
   const router = useRouter()
+  // The command palette hands a typed question over as `?q=`. It fills the
+  // composer rather than sending, so the developer sees it before it runs.
+  const askedFromPalette = useSearchParams().get("q") ?? ""
   const [messages, setMessages] = React.useState(chat.messages)
   const [streamed, setStreamed] = React.useState("")
   const [isAnswering, setIsAnswering] = React.useState(chat.pendingAnswer)
@@ -193,6 +196,18 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
   // A stable dependency for the send callback: the array itself is rebuilt
   // every render, so depending on it directly would rebuild the callback too.
   const scopeKey = scope.join(",")
+
+  // The server's monthly figure is a snapshot from page load, so asking a
+  // question has to show up before the refresh lands. Deriving the difference
+  // from `messages` rather than holding a counter means it self-corrects: once
+  // the refresh arrives, the new question is in both halves and the local
+  // adjustment falls back to zero on its own.
+  const questionsAsked = (list: ChatMessageView[]) =>
+    list.filter((message) => message.role === "user").length
+
+  const questionsThisMonth =
+    chat.questionsThisMonth +
+    Math.max(0, questionsAsked(messages) - questionsAsked(chat.messages))
   const [activeCitation, setActiveCitation] =
     React.useState<ActiveCitation | null>(() => {
       const source = [...chat.messages]
@@ -407,7 +422,7 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
                   />
 
                   <span className="ml-auto font-mono text-xs text-muted-foreground">
-                    {chat.questionsUsed} / {MONTHLY_QUESTION_LIMIT} questions
+                    {questionsThisMonth} / {MONTHLY_QUESTION_LIMIT} questions
                   </span>
                 </>
               }

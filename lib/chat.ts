@@ -26,6 +26,39 @@ export function formatBytes(bytes: number) {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+/**
+ * Flattens Markdown to the words a reader would say out loud — for previews
+ * and other places an answer is shown as one line of plain text.
+ *
+ * Deliberately lossy: structure is dropped rather than approximated, because
+ * a one-line summary has nowhere to put a heading or a list.
+ */
+export function toPlainText(markdown: string) {
+  return (
+    markdown
+      // Fenced code goes entirely; a snippet says nothing useful in a preview.
+      .replace(/```[\s\S]*?```/g, " ")
+      .replace(/`([^`]+)`/g, "$1")
+      // Links and images keep their label, not their target.
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+      // Citation markers, including the `[1:0]` passage form. The optional
+      // leading space goes with them, so "a claim [1]." doesn't become
+      // "a claim ." once the marker is gone.
+      .replace(/\s?\[\d+(?::\d+)?\]/g, "")
+      // Headings, quotes and bullets at the start of a line.
+      .replace(/^\s{0,3}(?:#{1,6}|>|[-*+])\s+/gm, "")
+      .replace(/^\s{0,3}\d+\.\s+/gm, "")
+      // Horizontal rules and table scaffolding.
+      .replace(/^\s{0,3}(?:[-*_]\s*){3,}$/gm, " ")
+      .replace(/\|/g, " ")
+      // Emphasis, bold first so `**x**` doesn't leave a stray asterisk.
+      .replace(/(\*\*|__)(.*?)\1/g, "$2")
+      .replace(/(\*|_)(?=\S)(.*?)(?<=\S)\1/g, "$2")
+      .replace(/\s+/g, " ")
+      .trim()
+  )
+}
+
 export type DocumentStatusView = "PROCESSING" | "READY" | "FAILED"
 
 export type LibraryDocumentView = {
@@ -94,7 +127,8 @@ export type ChatDetail = {
   title: string
   /** In citation order, which is the order they go to Claude. */
   documents: ChatDocumentView[]
-  questionsUsed: number
+  /** Workspace-wide questions this month — what the plan allowance counts. */
+  questionsThisMonth: number
   messages: ChatMessageView[]
   /**
    * True when the last turn is still waiting on Claude — either the seeded

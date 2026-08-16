@@ -1,4 +1,5 @@
 import { db } from "@/lib/db"
+import { toPlainText } from "@/lib/chat"
 import type {
   ChatDetail,
   ChatMessageView,
@@ -16,6 +17,26 @@ import { documentMeta, type DocumentPayload } from "@/lib/documents"
  * boundary, so a chat id alone must never be enough to read someone else's
  * documents.
  */
+
+/**
+ * Questions asked across the workspace this calendar month.
+ *
+ * This is the figure the plan allowance is measured against, so both the home
+ * page and the composer read it from here rather than counting their own way.
+ * The seeded brief-analysis request is excluded — the developer didn't ask it.
+ */
+export async function countQuestionsThisMonth(organizationId: string) {
+  const now = new Date()
+
+  return db.message.count({
+    where: {
+      role: "USER",
+      hidden: false,
+      createdAt: { gte: new Date(now.getFullYear(), now.getMonth(), 1) },
+      chat: { organizationId },
+    },
+  })
+}
 
 /** Sidebar history, newest conversation first. */
 export async function listChats(
@@ -42,7 +63,13 @@ export async function listChats(
     id: chat.id,
     title: chat.title,
     updatedAt: chat.updatedAt.toISOString(),
-    preview: chat.messages[0]?.content.slice(0, 140) ?? null,
+    // Flattened before trimming, so the 140 characters are all words rather
+    // than being spent on `##` and `**`. The slice ahead of it bounds the work
+    // when an answer runs to thousands of characters.
+    preview: chat.messages[0]
+      ? toPlainText(chat.messages[0].content.slice(0, 600)).slice(0, 140) ||
+        null
+      : null,
   }))
 }
 
@@ -138,14 +165,13 @@ export async function getChat(
   if (!chat) return null
 
   const last = chat.messages.at(-1)
+  const questionsThisMonth = await countQuestionsThisMonth(organizationId)
 
   return {
     id: chat.id,
     title: chat.title,
     documents: chat.documents.map((link) => link.document),
-    questionsUsed: chat.messages.filter(
-      (message) => message.role === "USER" && !message.hidden
-    ).length,
+    questionsThisMonth,
     // The seeded analysis request is context for Claude, not part of the thread.
     messages: chat.messages
       .filter((message) => !message.hidden)
@@ -416,4 +442,56 @@ export async function attachDocuments({
     attached: incoming.length,
     alreadyAttached: documentIds.length - incoming.length,
   }
+}
+
+export type WorkspaceStats = {
+  /** Documents that finished reading — the ones a chat can actually use. */
+  documentsIndexed: number
+  /** Documents still being read, or that failed. */
+  documentsPending: number
+  /** Questions asked this calendar month, against the plan's allowance. */
+  questionsThisMonth: number
+}
+
+/** The headline numbers on the dashboard home page. */
+export async function getWorkspaceStats(
+  organizationId: string
+): Promise<WorkspaceStats> {
+  const [documentsIndexed, documentsPending, questionsThisMonth] =
+    await Promise.all([
+      db.document.count({ where: { organizationId, status: "READY" } }),
+      db.document.count({
+        where: { organizationId, status: { not: "READY" } },
+      }),
+      countQuestionsThisMonth(organizationId),
+    ])
+
+  return { documentsIndexed, documentsPending, questionsThisMonth }
+}
+
+/** The newest uploads, for the home page's "Recent documents" list. */
+export async function listRecentDocuments(
+  organizationId: string,
+  take = 3
+): Promise<LibraryDocumentView[]> {
+  const documents = await db.document.findMany({
+    where: { organizationId },
+    orderBy: { createdAt: "desc" },
+    take,
+    select: {
+      id: true,
+      name: true,
+      sizeBytes: true,
+      pageCount: true,
+      status: true,
+    },
+  })
+
+  return documents.map((document) => ({
+    id: document.id,
+    name: document.name,
+    meta: documentMeta(document.sizeBytes, document.pageCount),
+    format: document.name.split(".").pop()?.toUpperCase() ?? "FILE",
+    status: document.status,
+  }))
 }

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { UserAvatar } from "@/components/auth/user-avatar"
 import { AccountMenu } from "@/components/dashboard/account-menu"
-import { SearchAskButton } from "@/components/search/search-ask-button"
+import { SearchCommand } from "@/components/search/search-command"
 import { ModeToggle } from "@/components/theme/mode-toggle"
 
 /** Links above "Sign out" in the header menu. */
@@ -48,7 +48,7 @@ function DashboardHeader({
       </h1>
 
       <div className="ml-auto flex items-center gap-2">
-        {showSearch && <SearchAskButton className="hidden sm:inline-flex" />}
+        {showSearch && <SearchCommand className="hidden sm:inline-flex" />}
         <ModeToggle className="size-9" />
 
         <AccountMenu
