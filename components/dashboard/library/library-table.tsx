@@ -3,16 +3,18 @@ import { FileTextIcon } from "lucide-react"
 import type { DocumentStatusView } from "@/lib/chat"
 import { getLibraryRows } from "@/lib/chat-store"
 import {
+  libraryHref,
   LIBRARY_PAGE_SIZE,
   shortAge,
   type LibraryStatusFilter,
 } from "@/lib/library"
+import { rangeLabel } from "@/lib/pagination"
 import { requireOrganization } from "@/lib/session"
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { TableBody, TableCell, TableRow } from "@/components/ui/table"
+import { Pager } from "@/components/dashboard/pager"
 import { LibraryTableFrame } from "@/components/dashboard/library/library-table-frame"
-import { LibraryPagination } from "@/components/dashboard/library/library-pagination"
 import { LibraryRowActions } from "@/components/dashboard/library/library-row-actions"
 
 /**
@@ -34,16 +36,6 @@ const STATUS: Record<
     dot: "bg-destructive",
     text: "text-destructive",
   },
-}
-
-/** "1–6 of 14 documents", bottom left of the table. */
-function rangeLabel(page: number, total: number) {
-  if (total === 0) return "No documents"
-
-  const first = (page - 1) * LIBRARY_PAGE_SIZE + 1
-  const last = Math.min(page * LIBRARY_PAGE_SIZE, total)
-
-  return `${first}–${last} of ${total} document${total === 1 ? "" : "s"}`
 }
 
 /**
@@ -77,14 +69,18 @@ async function LibraryTable({
       footer={
         <>
           <p className="font-mono text-sm text-muted-foreground">
-            {rangeLabel(rows.page, total)}
+            {rangeLabel({
+              page: rows.page,
+              total,
+              pageSize: LIBRARY_PAGE_SIZE,
+              noun: "document",
+            })}
           </p>
 
-          <LibraryPagination
+          <Pager
             page={rows.page}
             pageCount={pageCount}
-            status={status}
-            query={query}
+            hrefFor={(target) => libraryHref({ status, query, page: target })}
           />
         </>
       }

@@ -7,6 +7,30 @@ export function chatRoute(chatId: string) {
   return `${CHATS_ROUTE}/${chatId}`
 }
 
+/**
+ * Carries a question into a chat.
+ *
+ * Without `autoAsk` the question lands in the composer and waits for Enter —
+ * what the command palette wants, where the row is a jump and the developer
+ * may still be composing the thought. With it, the chat asks on arrival: the
+ * search page's card promises "one cited answer", and making someone press
+ * Enter to collect on that is a step that buys them nothing.
+ *
+ * Both are read once on mount and then stripped from the URL, so a reload
+ * never re-asks.
+ */
+export function chatQuestionHref(
+  chatId: string,
+  question: string,
+  { autoAsk = false }: { autoAsk?: boolean } = {}
+) {
+  const params = new URLSearchParams({ q: question })
+
+  if (autoAsk) params.set("ask", "1")
+
+  return `${chatRoute(chatId)}?${params}`
+}
+
 /** What the drop zone accepts — `ui-design/dashboard/light/chat-main.png`. */
 export const DOCUMENT_ACCEPT = ".pdf,.docx,.txt,.md"
 

@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 
 import {
+  chatQuestionHref,
   chatRoute,
   CHATS_ROUTE,
   type ChatSummary,
@@ -156,10 +157,11 @@ function SearchCommand({ className }: { className?: string }) {
                   // Forced to stay visible: cmdk would filter this row out on
                   // any query that doesn't happen to match its own text.
                   value={`ask ${trimmedQuery}`}
+                  // Prefills the composer rather than asking outright — the
+                  // palette is a jump, and half a thought typed into it
+                  // shouldn't cost a question.
                   onSelect={() =>
-                    go(
-                      `${chatRoute(newestChat.id)}?q=${encodeURIComponent(trimmedQuery)}`
-                    )
+                    go(chatQuestionHref(newestChat.id, trimmedQuery))
                   }
                   className={row}
                 >

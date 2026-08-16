@@ -1,3 +1,5 @@
+import { cache } from "react"
+
 import { db } from "@/lib/db"
 import { toPlainText } from "@/lib/chat"
 import type {
@@ -17,6 +19,16 @@ import {
   type LibraryRowsView,
   type LibraryStatusFilter,
 } from "@/lib/library"
+import { clampPage } from "@/lib/pagination"
+import {
+  scorePassage,
+  SEARCH_PAGE_SIZE,
+  searchStems,
+  splitPassages,
+  type SearchPassageView,
+  type SearchResultsView,
+  type SearchScopeView,
+} from "@/lib/search"
 
 /**
  * Chat and document reads/writes. Server-only.
@@ -185,9 +197,7 @@ export async function getLibraryRows({
     : matchingName
 
   const total = await db.document.count({ where: scoped })
-
-  const pageCount = Math.max(1, Math.ceil(total / LIBRARY_PAGE_SIZE))
-  const current = Math.min(Math.max(1, page), pageCount)
+  const { page: current, pageCount } = clampPage(page, total, LIBRARY_PAGE_SIZE)
 
   const documents = await db.document.findMany({
     where: scoped,
@@ -222,6 +232,149 @@ export async function getLibraryRows({
     pageCount,
   }
 }
+
+/** "Website_Brief_v2.docx" → "DOCX". */
+function documentFormat(name: string) {
+  return name.split(".").pop()?.toUpperCase() ?? "FILE"
+}
+
+/**
+ * What passage search can actually see, grouped into the scope chips.
+ *
+ * Only documents with extracted text: a PDF is handed to Claude whole and its
+ * text is never pulled out, so there is nothing here to match against. They're
+ * counted separately so the page can say so rather than quietly omitting them.
+ */
+export async function getSearchScopes(organizationId: string): Promise<{
+  scopes: SearchScopeView[]
+  searchableTotal: number
+  /** Indexed documents with no extracted text — PDFs, today. */
+  unsearchableTotal: number
+}> {
+  const documents = await db.document.findMany({
+    where: { organizationId, status: "READY" },
+    // Names only: this runs on every search, and `text` is the whole document.
+    select: { name: true, text: true },
+  })
+
+  const byFormat = new Map<string, number>()
+  let searchableTotal = 0
+  let unsearchableTotal = 0
+
+  for (const document of documents) {
+    if (document.text === null) {
+      unsearchableTotal += 1
+      continue
+    }
+
+    searchableTotal += 1
+    const format = documentFormat(document.name)
+    byFormat.set(format, (byFormat.get(format) ?? 0) + 1)
+  }
+
+  const scopes: SearchScopeView[] = [
+    { value: "all", label: "All documents", count: searchableTotal },
+    ...[...byFormat.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([format, count]) => ({ value: format, label: format, count })),
+  ]
+
+  return { scopes, searchableTotal, unsearchableTotal }
+}
+
+/**
+ * Searches the workspace's documents for passages matching a query.
+ *
+ * Candidates are narrowed in Postgres first — a document that contains none of
+ * the stems can't contain a matching passage, and `text` is the one column
+ * worth not transferring. The passages themselves are cut and scored by
+ * `lib/search.ts`.
+ *
+ * Arguments are positional and primitive on purpose: `cache` keys on argument
+ * identity, so an options object — a fresh reference every call — would miss
+ * every time. The header count and the results list both call this for the
+ * same search, and only one of them should actually run it.
+ */
+export const searchPassages = cache(async function searchPassages(
+  organizationId: string,
+  query: string,
+  scope: string = "all",
+  page: number = 1
+): Promise<SearchResultsView> {
+  const stems = searchStems(query)
+
+  const empty: SearchResultsView = {
+    passages: [],
+    total: 0,
+    documentCount: 0,
+    page: 1,
+    pageCount: 1,
+  }
+
+  if (stems.length === 0) return empty
+
+  const candidates = await db.document.findMany({
+    where: {
+      organizationId,
+      status: "READY",
+      text: { not: null },
+      // A prefix stem has to match as a substring here and is narrowed
+      // properly by the word-boundary matching in `scorePassage`.
+      OR: stems.map(({ stem }) => ({
+        text: { contains: stem, mode: "insensitive" as const },
+      })),
+      ...(scope === "all"
+        ? {}
+        : {
+            name: {
+              endsWith: `.${scope.toLowerCase()}`,
+              mode: "insensitive" as const,
+            },
+          }),
+    },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, name: true, pageCount: true, text: true },
+  })
+
+  const matched: SearchPassageView[] = []
+
+  for (const document of candidates) {
+    const format = documentFormat(document.name)
+
+    splitPassages(document.text ?? "").forEach((passage, index) => {
+      const scored = scorePassage(passage, stems)
+      if (!scored) return
+
+      matched.push({
+        id: `${document.id}:${index}`,
+        documentId: document.id,
+        documentName: document.name,
+        format,
+        // Always null today, and honestly so: page numbers are only known for
+        // PDFs, and a PDF has no extracted text for a passage to come from.
+        // The card omits the chip rather than guessing at a number.
+        page: null,
+        ...scored,
+      })
+    })
+  }
+
+  matched.sort(
+    (a, b) => b.score - a.score || a.documentName.localeCompare(b.documentName)
+  )
+
+  const total = matched.length
+  const { page: current, pageCount } = clampPage(page, total, SEARCH_PAGE_SIZE)
+  const start = (current - 1) * SEARCH_PAGE_SIZE
+
+  return {
+    passages: matched.slice(start, start + SEARCH_PAGE_SIZE),
+    total,
+    documentCount: new Set(matched.map((passage) => passage.documentId)).size,
+    page: current,
+    pageCount,
+  }
+})
 
 /**
  * Removes a document from the library for good.

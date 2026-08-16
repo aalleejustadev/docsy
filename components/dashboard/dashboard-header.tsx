@@ -5,6 +5,7 @@ import { SettingsIcon } from "lucide-react"
 
 import type { SessionUser } from "@/lib/auth-client"
 import { dashboardPageTitle, SETTINGS_ROUTE } from "@/lib/dashboard-nav"
+import { SEARCH_ROUTE } from "@/lib/search"
 import { Button } from "@/components/ui/button"
 import { SidebarTrigger } from "@/components/ui/sidebar"
 import { UserAvatar } from "@/components/auth/user-avatar"
@@ -48,7 +49,11 @@ function DashboardHeader({
       </h1>
 
       <div className="ml-auto flex items-center gap-2">
-        {showSearch && <SearchCommand className="hidden sm:inline-flex" />}
+        {/* The search page has a search box of its own, and the reference
+            drops this one there rather than showing two. */}
+        {showSearch && pathname !== SEARCH_ROUTE && (
+          <SearchCommand className="hidden sm:inline-flex" />
+        )}
         <ModeToggle className="size-9" />
 
         <AccountMenu

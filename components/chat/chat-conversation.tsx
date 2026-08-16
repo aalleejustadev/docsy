@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { PaperclipIcon } from "lucide-react"
 
 import {
+  chatRoute,
   MONTHLY_QUESTION_LIMIT,
   type ChatDetail,
   type ChatMessageView,
@@ -175,12 +176,52 @@ function ChatTurn({
 /** An open chat — `ui-design/dashboard/light/chat-page-chat.png`. */
 function ChatConversation({ chat }: { chat: ChatDetail }) {
   const router = useRouter()
-  // The command palette hands a typed question over as `?q=`. It fills the
-  // composer rather than sending, so the developer sees it before it runs.
-  const askedFromPalette = useSearchParams().get("q") ?? ""
-  const [messages, setMessages] = React.useState(chat.messages)
+  const searchParams = useSearchParams()
+
+  /**
+   * A question carried in on the URL — from the command palette, which only
+   * prefills, or from the search page's "Ask Docsy" card, which asks outright.
+   *
+   * Captured once at mount rather than read on every render: the parameters
+   * are stripped from the URL as soon as the question is sent, and re-reading
+   * them would turn that cleanup into "the question vanished".
+   */
+  const [carried] = React.useState(() => {
+    const question = searchParams.get("q")?.trim() ?? ""
+
+    return {
+      question,
+      // Never while something is already in flight: the seeded brief analysis
+      // gets the first turn, and the question waits in the composer instead of
+      // racing it.
+      autoAsk:
+        question.length > 0 &&
+        searchParams.get("ask") === "1" &&
+        !chat.pendingAnswer,
+    }
+  })
+
+  // An auto-asked question is part of the opening state rather than something
+  // pushed in by an effect, so the thread renders with it already in place —
+  // no empty-then-populated flash, and no setState during mount.
+  const [messages, setMessages] = React.useState<ChatMessageView[]>(() =>
+    carried.autoAsk
+      ? [
+          ...chat.messages,
+          {
+            id: "carried-question",
+            role: "user",
+            content: carried.question,
+            sources: [],
+            feedback: null,
+          },
+        ]
+      : chat.messages
+  )
   const [streamed, setStreamed] = React.useState("")
-  const [isAnswering, setIsAnswering] = React.useState(chat.pendingAnswer)
+  const [isAnswering, setIsAnswering] = React.useState(
+    chat.pendingAnswer || carried.autoAsk
+  )
   const [error, setError] = React.useState<string | null>(null)
   const [isAttachOpen, setIsAttachOpen] = React.useState(false)
   // Tracked as what's been *excluded* rather than what's selected, so a
@@ -309,12 +350,31 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
     [chat.id, router, scopeKey]
   )
 
+  /**
+   * Fires the one answer this mount owes: the seeded brief analysis, or a
+   * question carried in from the search page. The ref guards both — React
+   * mounts effects twice in dev, and either would otherwise be billed twice.
+   */
+  const outstanding = chat.pendingAnswer || carried.autoAsk
+
   React.useEffect(() => {
-    if (!chat.pendingAnswer || requested.current) return
+    if (!outstanding || requested.current) return
 
     requested.current = true
-    void answer()
-  }, [chat.pendingAnswer, answer])
+    void answer(carried.autoAsk ? carried.question : undefined)
+
+    // The question is in the thread now, so the URL shouldn't keep carrying
+    // it — a reload would otherwise ask it, and bill it, all over again.
+    //
+    // `history.replaceState` rather than `router.replace`: this is the same
+    // page with a parameter dropped, and Next syncs it into the router
+    // without a server round trip. `router.replace` re-renders the route,
+    // which in practice left the question in the URL for seconds after it had
+    // already been asked — exactly the window a reload must not land in.
+    if (carried.autoAsk) {
+      window.history.replaceState(null, "", chatRoute(chat.id))
+    }
+  }, [outstanding, carried, answer, chat.id])
 
   function ask(question: string) {
     setError(null)
@@ -395,6 +455,9 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
               tone="outline"
               disabled={isAnswering}
               onSend={ask}
+              // Only the prefill case: an auto-asked question is already in
+              // the thread, and leaving a copy here invites asking it twice.
+              defaultValue={carried.autoAsk ? "" : carried.question}
               placeholder="Ask a follow-up about your documents…"
               footer={
                 <>

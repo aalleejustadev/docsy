@@ -1,11 +1,7 @@
 import Link from "next/link"
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
 
-import {
-  libraryHref,
-  libraryPageNumbers,
-  type LibraryStatusFilter,
-} from "@/lib/library"
+import { pageNumbers } from "@/lib/pagination"
 import { Button } from "@/components/ui/button"
 import {
   Pagination,
@@ -13,11 +9,6 @@ import {
   PaginationEllipsis,
   PaginationItem,
 } from "@/components/ui/pagination"
-
-type PageStep = {
-  status: LibraryStatusFilter
-  query: string
-}
 
 /**
  * One pager control. `href` being null is the "there's no such page" case —
@@ -65,25 +56,25 @@ function PageLink({
 }
 
 /**
- * Previous · 1 2 3 · Next, under the table.
+ * Previous · 1 2 3 · Next, under a paged list.
  *
- * Real links, so a page of the library can be bookmarked and opened in a new
- * tab. `scroll={false}` keeps the table where it is instead of jumping the
- * reader back to the heading on every page turn.
+ * Real links, so a page can be bookmarked and opened in a new tab. The caller
+ * supplies `hrefFor` because each list keeps its own filters in the query
+ * string and the pager has no business knowing what they are.
+ *
+ * `scroll={false}` keeps the list where it is instead of jumping the reader
+ * back to the heading on every page turn.
  */
-function LibraryPagination({
+function Pager({
   page,
   pageCount,
-  status,
-  query,
-}: PageStep & {
+  hrefFor,
+}: {
   page: number
   pageCount: number
+  hrefFor: (page: number) => string
 }) {
   if (pageCount <= 1) return null
-
-  const hrefFor = (target: number) =>
-    libraryHref({ status, query, page: target })
 
   return (
     <Pagination className="mx-0 w-auto justify-end">
@@ -99,7 +90,7 @@ function LibraryPagination({
           </PageLink>
         </PaginationItem>
 
-        {libraryPageNumbers(page, pageCount).map((number, index) =>
+        {pageNumbers(page, pageCount).map((number, index) =>
           number === "ellipsis" ? (
             <PaginationItem key={`ellipsis-${index}`}>
               <PaginationEllipsis className="size-9" />
@@ -133,4 +124,4 @@ function LibraryPagination({
   )
 }
 
-export { LibraryPagination }
+export { Pager }

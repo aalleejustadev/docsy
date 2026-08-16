@@ -69,38 +69,6 @@ export function libraryHref({
 }
 
 /**
- * The page numbers to render, collapsing the middle once there are too many
- * to sit in a row. Always keeps the first, the last and the current page's
- * neighbours, so the reader can always step one page at a time or jump to
- * either end.
- */
-export function libraryPageNumbers(
-  page: number,
-  pageCount: number
-): (number | "ellipsis")[] {
-  if (pageCount <= 7) {
-    return Array.from({ length: pageCount }, (_, index) => index + 1)
-  }
-
-  const wanted = [1, page - 1, page, page + 1, pageCount]
-    .filter((number) => number >= 1 && number <= pageCount)
-    .sort((a, b) => a - b)
-
-  const numbers: (number | "ellipsis")[] = []
-  let previous = 0
-
-  for (const number of wanted) {
-    if (number === previous) continue
-    if (previous && number - previous > 1) numbers.push("ellipsis")
-
-    numbers.push(number)
-    previous = number
-  }
-
-  return numbers
-}
-
-/**
  * "2h ago", "5d ago" — the compact ages in the Added column.
  *
  * `date-fns` would say "2 hours"; the reference is tighter than that and the
