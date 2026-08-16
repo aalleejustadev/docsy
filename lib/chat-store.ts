@@ -8,7 +8,15 @@ import type {
   LibraryDocumentView,
   MessageFeedbackView,
 } from "@/lib/chat"
+import type { DashboardNavCounts } from "@/lib/dashboard-nav"
 import { documentMeta, type DocumentPayload } from "@/lib/documents"
+import {
+  LIBRARY_PAGE_SIZE,
+  libraryStatusFilters,
+  type LibraryCountsView,
+  type LibraryRowsView,
+  type LibraryStatusFilter,
+} from "@/lib/library"
 
 /**
  * Chat and document reads/writes. Server-only.
@@ -99,6 +107,153 @@ export async function listLibraryDocuments(
     format: document.name.split(".").pop()?.toUpperCase() ?? "FILE",
     status: document.status,
   }))
+}
+
+/** Documents in this workspace whose name matches the library's search. */
+function libraryNameFilter(organizationId: string, query: string) {
+  const search = query.trim()
+
+  return {
+    organizationId,
+    ...(search
+      ? { name: { contains: search, mode: "insensitive" as const } }
+      : {}),
+  }
+}
+
+/**
+ * The library's headline number and its four tab counts.
+ *
+ * Split from the rows so the page can paint its toolbar without waiting on the
+ * table: these are two aggregates, the rows behind them are a scan. The counts
+ * are taken under the name filter but not under the active tab, so switching
+ * tabs never changes the numbers on the tabs themselves.
+ */
+export async function getLibraryCounts({
+  organizationId,
+  query = "",
+}: {
+  organizationId: string
+  query?: string
+}): Promise<LibraryCountsView> {
+  const [libraryTotal, byStatus] = await Promise.all([
+    db.document.count({ where: { organizationId } }),
+    db.document.groupBy({
+      by: ["status"],
+      where: libraryNameFilter(organizationId, query),
+      _count: true,
+    }),
+  ])
+
+  const tally = new Map(byStatus.map((row) => [row.status, row._count]))
+
+  return {
+    libraryTotal,
+    counts: {
+      all: byStatus.reduce((sum, row) => sum + row._count, 0),
+      indexed: tally.get("READY") ?? 0,
+      indexing: tally.get("PROCESSING") ?? 0,
+      failed: tally.get("FAILED") ?? 0,
+    },
+  }
+}
+
+/**
+ * One page of library rows — `dashboard-library-page.png`.
+ *
+ * Paged in Postgres rather than in the browser: a workspace's library grows
+ * without bound, and `data` is a `Bytes` column nobody wants pulled across.
+ */
+export async function getLibraryRows({
+  organizationId,
+  status = "all",
+  query = "",
+  page = 1,
+}: {
+  organizationId: string
+  status?: LibraryStatusFilter
+  query?: string
+  page?: number
+}): Promise<LibraryRowsView> {
+  const activeStatus = libraryStatusFilters.find(
+    (filter) => filter.value === status
+  )?.status
+
+  const matchingName = libraryNameFilter(organizationId, query)
+  const scoped = activeStatus
+    ? { ...matchingName, status: activeStatus }
+    : matchingName
+
+  const total = await db.document.count({ where: scoped })
+
+  const pageCount = Math.max(1, Math.ceil(total / LIBRARY_PAGE_SIZE))
+  const current = Math.min(Math.max(1, page), pageCount)
+
+  const documents = await db.document.findMany({
+    where: scoped,
+    orderBy: { createdAt: "desc" },
+    skip: (current - 1) * LIBRARY_PAGE_SIZE,
+    take: LIBRARY_PAGE_SIZE,
+    // No `data` and no `text` — the table shows labels, and the bytes would be
+    // megabytes per row for nothing.
+    select: {
+      id: true,
+      name: true,
+      sizeBytes: true,
+      pageCount: true,
+      status: true,
+      createdAt: true,
+      _count: { select: { chats: true } },
+    },
+  })
+
+  return {
+    documents: documents.map((document) => ({
+      id: document.id,
+      name: document.name,
+      meta: documentMeta(document.sizeBytes, document.pageCount),
+      format: document.name.split(".").pop()?.toUpperCase() ?? "FILE",
+      status: document.status,
+      createdAt: document.createdAt.toISOString(),
+      chatCount: document._count.chats,
+    })),
+    total,
+    page: current,
+    pageCount,
+  }
+}
+
+/**
+ * Removes a document from the library for good.
+ *
+ * Scoped by workspace, so an id from another tenant deletes nothing rather
+ * than being trusted because it was well-formed. The `chatDocument` links
+ * cascade from the schema — a chat that cited it keeps its answers, it just
+ * has one fewer source behind them, which is what the confirmation says.
+ *
+ * Returns false when nothing matched, so the caller can 404.
+ */
+export async function deleteDocument(
+  documentId: string,
+  organizationId: string
+) {
+  const result = await db.document.deleteMany({
+    where: { id: documentId, organizationId },
+  })
+
+  return result.count > 0
+}
+
+/** The live numbers beside Chats and Library in the sidebar. */
+export async function getNavCounts(
+  organizationId: string
+): Promise<DashboardNavCounts> {
+  const [chats, documents] = await Promise.all([
+    db.chat.count({ where: { organizationId } }),
+    db.document.count({ where: { organizationId } }),
+  ])
+
+  return { chats, documents }
 }
 
 /**

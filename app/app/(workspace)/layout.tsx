@@ -1,5 +1,6 @@
 import { cookies } from "next/headers"
 
+import { getNavCounts } from "@/lib/chat-store"
 import { requireOrganization, requireSession } from "@/lib/session"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
@@ -20,13 +21,20 @@ export default async function WorkspaceLayout({
 }>) {
   const session = await requireSession()
   const organization = await requireOrganization()
-  const cookieStore = await cookies()
+  const [cookieStore, counts] = await Promise.all([
+    cookies(),
+    getNavCounts(organization.id),
+  ])
 
   return (
     <SidebarProvider
       defaultOpen={cookieStore.get(SIDEBAR_COOKIE_NAME)?.value !== "false"}
     >
-      <DashboardSidebar user={session.user} workspaceName={organization.name} />
+      <DashboardSidebar
+        user={session.user}
+        workspaceName={organization.name}
+        counts={counts}
+      />
 
       <SidebarInset className="min-w-0">
         <DashboardHeader user={session.user} showSidebarTrigger />

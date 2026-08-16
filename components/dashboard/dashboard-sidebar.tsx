@@ -18,6 +18,7 @@ import {
   isDashboardNavItemActive,
   SETTINGS_ROUTE,
   workspaceInitials,
+  type DashboardNavCounts,
 } from "@/lib/dashboard-nav"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -52,10 +53,13 @@ const accountMenuItems = [
 function DashboardSidebar({
   user,
   workspaceName,
+  counts,
 }: {
   user: SessionUser
   /** The active organization's name, resolved by the workspace layout. */
   workspaceName: string
+  /** Live chat and document totals for this workspace. */
+  counts: DashboardNavCounts
 }) {
   const pathname = usePathname()
 
@@ -94,6 +98,9 @@ function DashboardSidebar({
               <SidebarMenu className="gap-1">
                 {group.items.map((item) => {
                   const isActive = isDashboardNavItemActive(item, pathname)
+                  // Zero is left off rather than shown: an empty library is
+                  // already obvious from the page, and "0" reads as a badge.
+                  const count = item.count ? counts[item.count] : 0
 
                   return (
                     <SidebarMenuItem key={item.href}>
@@ -106,9 +113,9 @@ function DashboardSidebar({
                         <span>{item.label}</span>
                       </SidebarMenuButton>
 
-                      {item.count && (
+                      {count > 0 && (
                         <SidebarMenuBadge className="top-2 right-2 text-muted-foreground">
-                          {item.count}
+                          {count}
                         </SidebarMenuBadge>
                       )}
 

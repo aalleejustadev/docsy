@@ -28,12 +28,21 @@ export type DashboardNavSubItem = {
   label: string
 }
 
+/** Which live workspace number sits on the right of a nav item. */
+export type DashboardNavCount = "chats" | "documents"
+
+/**
+ * The numbers themselves. Lives here rather than beside the query so the
+ * sidebar can type its prop without importing a module that pulls in Prisma.
+ */
+export type DashboardNavCounts = Record<DashboardNavCount, number>
+
 export type DashboardNavItem = {
   href: string
   label: string
   icon: LucideIcon
-  /** Right-aligned count. Placeholder copy until the real numbers exist. */
-  count?: string
+  /** Right-aligned count, read from the database by the workspace layout. */
+  count?: DashboardNavCount
   /** Right-aligned pill, e.g. the owner role on Admin. */
   tag?: string
   /** Nested links, revealed while the section is open. */
@@ -55,13 +64,13 @@ export const dashboardNav: DashboardNavGroup[] = [
         href: `${APP_ROOT}/chats`,
         label: "Chats",
         icon: MessageSquareIcon,
-        count: "12",
+        count: "chats",
       },
       {
         href: `${APP_ROOT}/library`,
         label: "Library",
         icon: LibraryIcon,
-        count: "42",
+        count: "documents",
       },
       { href: `${APP_ROOT}/search`, label: "Search", icon: SearchIcon },
     ],
