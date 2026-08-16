@@ -3,7 +3,7 @@ import { NextResponse } from "next/server"
 import { requireApiContext } from "@/lib/api-session"
 import { formatBytes, type LibraryDocumentView } from "@/lib/chat"
 import { db } from "@/lib/db"
-import { listLibraryDocuments } from "@/lib/chat-store"
+import { clearDocuments, listLibraryDocuments } from "@/lib/chat-store"
 import {
   classifyDocument,
   documentMeta,
@@ -105,4 +105,19 @@ export async function POST(request: Request) {
   }
 
   return NextResponse.json(view, { status: 201 })
+}
+
+/**
+ * Empties the workspace's library — Settings → Danger zone.
+ *
+ * Chats survive: they keep the answers already written, and lose the sources
+ * those answers cite, which is what the confirmation warns about.
+ */
+export async function DELETE() {
+  const guard = await requireApiContext()
+  if (!guard.ok) return guard.response
+
+  const documents = await clearDocuments(guard.context.organizationId)
+
+  return NextResponse.json({ documents })
 }

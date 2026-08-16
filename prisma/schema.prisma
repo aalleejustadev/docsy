@@ -228,6 +228,26 @@ model Message {
   @@map("message")
 }
 
+/// Not a Better Auth model, and deliberately not a relation of anything.
+///
+/// The allowance ledger: one row per question the workspace is charged for.
+/// `Message` can't be that record — clearing chat history deletes it, which
+/// would hand back the month's allowance along with the conversations. Nothing
+/// cascades into this table, so the only thing that moves the month's usage is
+/// asking another question.
+model QuestionEvent {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  /// The chat it was asked in. A plain column, not a relation: the chat may
+  /// have been deleted, and this row has to outlive it.
+  chatId         String?
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, createdAt])
+  @@map("questionEvent")
+}
+
 enum MessageRole {
   USER
   ASSISTANT

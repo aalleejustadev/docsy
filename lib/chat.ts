@@ -39,8 +39,48 @@ export const DOCUMENT_FORMATS_LABEL = "PDF, Word, text, markdown · up to 15 MB"
 /** One chat can only hold so much context before answers get vague. */
 export const MAX_DOCUMENTS_PER_CHAT = 20
 
-/** Plan quota shown in the composer footer — `chat-page-chat.png`. */
+/**
+ * Questions the plan allows per calendar month — the figure in the composer
+ * footer, and the one the server refuses on.
+ *
+ * A constant while every workspace is on the same plan. When plans become real
+ * this reads off the organization's subscription instead, and
+ * `questionAllowance` is the only caller that has to learn about it.
+ */
 export const MONTHLY_QUESTION_LIMIT = 50
+
+/** The month's allowance, spent and remaining. */
+export type QuestionAllowance = {
+  used: number
+  limit: number
+  /** Never negative, so a lowered limit reads as spent rather than owed. */
+  remaining: number
+  /** True once the allowance is gone and the next question must be refused. */
+  spent: boolean
+}
+
+/**
+ * Both halves of "12 / 50 questions", and the verdict the messages route
+ * refuses on. The composer compares against `MONTHLY_QUESTION_LIMIT` directly:
+ * it re-derives the used figure on every keystroke, and the React Compiler
+ * can't memoize a component that calls out to here mid-render.
+ */
+export function questionAllowance(
+  used: number,
+  limit: number = MONTHLY_QUESTION_LIMIT
+): QuestionAllowance {
+  return {
+    used,
+    limit,
+    remaining: Math.max(0, limit - used),
+    spent: used >= limit,
+  }
+}
+
+/** What the composer and the API say when the month's questions are gone. */
+export function allowanceSpentMessage(limit = MONTHLY_QUESTION_LIMIT) {
+  return `You've used all ${limit} questions on your plan this month. Your allowance resets on the 1st.`
+}
 
 /** "2.4 MB", "880 KB" — shared so uploads and library rows read the same. */
 export function formatBytes(bytes: number) {

@@ -3,12 +3,14 @@ import { NextResponse } from "next/server"
 import { isAnthropicConfigured } from "@/lib/anthropic"
 import { requireApiContext } from "@/lib/api-session"
 import { streamAnswer } from "@/lib/answer"
-import type { ChatSource } from "@/lib/chat"
+import { allowanceSpentMessage, type ChatSource } from "@/lib/chat"
 import {
   addMessage,
   getChat,
   getChatDocuments,
   getChatHistory,
+  getQuestionAllowance,
+  recordQuestion,
 } from "@/lib/chat-store"
 
 /** Reading a long brief and writing the briefing takes minutes, not seconds. */
@@ -57,6 +59,18 @@ export async function POST(
     typeof body.question === "string" ? body.question.trim() : undefined
 
   if (question) {
+    // Enforced here, not in the browser: the composer disables itself once the
+    // allowance is spent, but the limit has to hold for a tab that never
+    // re-rendered and for a request that never came from one.
+    const allowance = await getQuestionAllowance(guard.context.organizationId)
+
+    if (allowance.spent) {
+      return NextResponse.json(
+        { error: allowanceSpentMessage(allowance.limit) },
+        { status: 402 }
+      )
+    }
+
     await addMessage({ chatId, role: "USER", content: question })
   } else if (!chat.pendingAnswer) {
     return NextResponse.json(
@@ -94,6 +108,19 @@ export async function POST(
       { error: "None of those documents belong to this chat." },
       { status: 400 }
     )
+  }
+
+  // Charged here: past every reason this request could still be turned away,
+  // and before a single token is asked for. Not when the answer finishes —
+  // that would make disconnecting mid-stream a way to read one for free, and
+  // charging at the moment the work is commissioned is what makes the ledger
+  // impossible to game.
+  if (question) {
+    await recordQuestion({
+      organizationId: guard.context.organizationId,
+      userId: guard.context.userId,
+      chatId,
+    })
   }
 
   const encoder = new TextEncoder()

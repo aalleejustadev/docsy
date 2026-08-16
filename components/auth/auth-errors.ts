@@ -18,6 +18,10 @@ const MESSAGES: Record<string, string> = {
   PASSWORD_TOO_LONG: "That password is too long.",
   INVALID_TOKEN: "That link is invalid or has already been used.",
   INVALID_EMAIL: "Enter a valid email address.",
+  INVALID_PASSWORD: "That password doesn't match this account.",
+  // Deleting an account without a password to confirm it needs a session
+  // minted in the last hour — signing in again is the way back.
+  SESSION_EXPIRED: "Sign out and sign back in, then try that again.",
 }
 
 export function authErrorMessage(error: AuthError, fallback: string) {

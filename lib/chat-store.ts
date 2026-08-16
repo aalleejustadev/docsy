@@ -1,7 +1,12 @@
 import { cache } from "react"
 
 import { db } from "@/lib/db"
-import { MONTHLY_QUESTION_LIMIT, toPlainText } from "@/lib/chat"
+import {
+  MONTHLY_QUESTION_LIMIT,
+  questionAllowance,
+  toPlainText,
+  type QuestionAllowance,
+} from "@/lib/chat"
 import type {
   ChatDetail,
   ChatMessageView,
@@ -47,21 +52,55 @@ import {
 /**
  * Questions asked across the workspace this calendar month.
  *
- * This is the figure the plan allowance is measured against, so both the home
- * page and the composer read it from here rather than counting their own way.
- * The seeded brief-analysis request is excluded — the developer didn't ask it.
+ * Counted from `questionEvent`, not from the messages in chat history: the
+ * allowance is what the workspace has spent, and deleting the conversation it
+ * was spent on doesn't hand it back. Nothing cascades into that table, so
+ * clearing history, clearing the library, or deleting a single chat all leave
+ * this figure alone.
+ *
+ * The seeded brief-analysis request never lands here — the developer didn't
+ * ask it, so it isn't charged for it.
  */
 export async function countQuestionsThisMonth(organizationId: string) {
   const now = new Date()
 
-  return db.message.count({
+  return db.questionEvent.count({
     where: {
-      role: "USER",
-      hidden: false,
+      organizationId,
       createdAt: { gte: new Date(now.getFullYear(), now.getMonth(), 1) },
-      chat: { organizationId },
     },
   })
+}
+
+/**
+ * What's left of the month's allowance.
+ *
+ * The one place that decides whether another question may be asked — the
+ * composer shows what it returns, and the messages route refuses on it.
+ */
+export async function getQuestionAllowance(
+  organizationId: string
+): Promise<QuestionAllowance> {
+  return questionAllowance(await countQuestionsThisMonth(organizationId))
+}
+
+/**
+ * Charges a question to the workspace's allowance.
+ *
+ * Written alongside the message rather than derived from it, so the two can
+ * part ways: the message is conversation history the developer may delete, and
+ * this row is the billing record they may not.
+ */
+export async function recordQuestion({
+  organizationId,
+  userId,
+  chatId,
+}: {
+  organizationId: string
+  userId: string
+  chatId: string
+}) {
+  await db.questionEvent.create({ data: { organizationId, userId, chatId } })
 }
 
 /** Sidebar history, newest conversation first. */
@@ -414,12 +453,19 @@ export async function getUsage(organizationId: string): Promise<UsageView> {
     now.getDate() - (USAGE_CHART_DAYS - 1)
   )
 
-  const [documentsIndexed, questions, recent, answers, documents] =
+  const [documentsIndexed, questions, asked, recent, answers, documents] =
     await Promise.all([
       db.document.count({ where: { organizationId, status: "READY" } }),
       countQuestionsThisMonth(organizationId),
-      // Everything needed to chart the last fortnight and to time the answers
-      // given this month — whichever window starts earlier.
+      // The chart counts the ledger, like the headline figure above it does —
+      // charting the surviving messages instead would leave the two disagreeing
+      // for any workspace that has cleared its history.
+      db.questionEvent.findMany({
+        where: { organizationId, createdAt: { gte: chartStart } },
+        select: { createdAt: true },
+      }),
+      // Message rows, for the two figures that are about answers rather than
+      // allowance: how long they took, and what they cited.
       db.message.findMany({
         where: {
           chat: { organizationId },
@@ -455,11 +501,10 @@ export async function getUsage(organizationId: string): Promise<UsageView> {
     perDay.set(localDay(day), 0)
   }
 
-  for (const message of recent) {
-    if (message.role !== "USER" || message.hidden) continue
-
-    const key = localDay(message.createdAt)
-    // Only days inside the window; the query reaches further back for timings.
+  for (const question of asked) {
+    const key = localDay(question.createdAt)
+    // Guards the edges of the window: a row written a moment before the
+    // fortnight rolled over has no column to land in.
     if (perDay.has(key)) perDay.set(key, (perDay.get(key) ?? 0) + 1)
   }
 
@@ -558,6 +603,20 @@ export async function deleteDocument(
   })
 
   return result.count > 0
+}
+
+/**
+ * Empties the workspace's library — Settings → Danger zone.
+ *
+ * Chats keep their answers and lose the sources behind them, which is the same
+ * trade deleting one document makes; the `chatDocument` links cascade.
+ *
+ * Returns how many rows went, so the confirmation toast can say.
+ */
+export async function clearDocuments(organizationId: string) {
+  const { count } = await db.document.deleteMany({ where: { organizationId } })
+
+  return count
 }
 
 /** The live numbers beside Chats and Library in the sidebar. */
@@ -838,6 +897,20 @@ export async function deleteChat(chatId: string, organizationId: string) {
       keptSharedDocuments: documentIds.length - orphaned.length,
     }
   })
+}
+
+/**
+ * Empties the workspace's chat history — Settings → Danger zone.
+ *
+ * Unlike `deleteChat` this leaves documents alone rather than collecting the
+ * ones nothing cites any more: the confirmation promises the library stays,
+ * and a document is the workspace's material whether or not a chat used it.
+ * Messages and `chatDocument` links go through the schema's cascades.
+ */
+export async function clearChats(organizationId: string) {
+  const { count } = await db.chat.deleteMany({ where: { organizationId } })
+
+  return count
 }
 
 /**

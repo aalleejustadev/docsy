@@ -5,12 +5,14 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { PaperclipIcon } from "lucide-react"
 
 import {
+  allowanceSpentMessage,
   chatRoute,
   MONTHLY_QUESTION_LIMIT,
   type ChatDetail,
   type ChatMessageView,
   type ChatSource,
 } from "@/lib/chat"
+import { cn } from "@/lib/utils"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Bubble, BubbleContent } from "@/components/ui/bubble"
 import { InputGroupButton } from "@/components/ui/input-group"
@@ -249,6 +251,10 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
   const questionsThisMonth =
     chat.questionsThisMonth +
     Math.max(0, questionsAsked(messages) - questionsAsked(chat.messages))
+
+  // The server decides this for real — see the messages route. Here it only
+  // has to stop the composer offering a question that would be refused.
+  const allowanceSpent = questionsThisMonth >= MONTHLY_QUESTION_LIMIT
   const [activeCitation, setActiveCitation] =
     React.useState<ActiveCitation | null>(() => {
       const source = [...chat.messages]
@@ -453,12 +459,18 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
           <div className="mx-auto w-full max-w-3xl">
             <ChatComposer
               tone="outline"
-              disabled={isAnswering}
+              // The server refuses either way; this is so a spent allowance
+              // reads as spent rather than as a question that vanished.
+              disabled={isAnswering || allowanceSpent}
               onSend={ask}
               // Only the prefill case: an auto-asked question is already in
               // the thread, and leaving a copy here invites asking it twice.
               defaultValue={carried.autoAsk ? "" : carried.question}
-              placeholder="Ask a follow-up about your documents…"
+              placeholder={
+                allowanceSpent
+                  ? allowanceSpentMessage()
+                  : "Ask a follow-up about your documents…"
+              }
               footer={
                 <>
                   <InputGroupButton
@@ -484,7 +496,12 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
                     disabled={isAnswering}
                   />
 
-                  <span className="ml-auto font-mono text-xs text-muted-foreground">
+                  <span
+                    className={cn(
+                      "ml-auto font-mono text-xs text-muted-foreground",
+                      allowanceSpent && "text-destructive"
+                    )}
+                  >
                     {questionsThisMonth} / {MONTHLY_QUESTION_LIMIT} questions
                   </span>
                 </>

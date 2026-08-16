@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 
 import { ANTHROPIC_BRIEF_ANALYSIS_PROMPT } from "@/lib/anthropic"
 import { requireApiContext } from "@/lib/api-session"
-import { createChat, readyDocumentIds } from "@/lib/chat-store"
+import { clearChats, createChat, readyDocumentIds } from "@/lib/chat-store"
 import { MAX_DOCUMENTS_PER_CHAT } from "@/lib/chat"
 
 /** "Website_Brief_v2.pdf" → "Website Brief v2". */
@@ -77,4 +77,20 @@ export async function POST(request: Request) {
   })
 
   return NextResponse.json({ id: chat.id }, { status: 201 })
+}
+
+/**
+ * Empties the workspace's chat history — Settings → Danger zone.
+ *
+ * Workspace-wide, not per-user: chats belong to the workspace everywhere else
+ * in the app, so "delete every conversation" has to mean the same set the
+ * sidebar counts.
+ */
+export async function DELETE() {
+  const guard = await requireApiContext()
+  if (!guard.ok) return guard.response
+
+  const chats = await clearChats(guard.context.organizationId)
+
+  return NextResponse.json({ chats })
 }

@@ -4,6 +4,7 @@ import { prismaAdapter } from "better-auth/adapters/prisma"
 import { nextCookies } from "better-auth/next-js"
 import { organization } from "better-auth/plugins"
 
+import { purgeUserData } from "@/lib/account"
 import { configuredSocialProviders } from "@/lib/auth-providers"
 import { db } from "@/lib/db"
 import {
@@ -47,6 +48,20 @@ export const auth = betterAuth({
   },
 
   user: {
+    deleteUser: {
+      // Settings → Danger zone. Better Auth wants either the account's
+      // password or a session minted inside `freshAge`; the dialog asks for
+      // the password whenever there is one, so a stale tab can't delete an
+      // account on its own.
+      enabled: true,
+      // Chats, documents and avatars aren't Better Auth's, so nothing
+      // cascades to them — they go here, before the account they're scoped by
+      // disappears.
+      beforeDelete: async (user) => {
+        await purgeUserData(user.id)
+      },
+    },
+
     changeEmail: {
       enabled: true,
       // No `sendChangeEmailConfirmation` on purpose. Configuring it turns the

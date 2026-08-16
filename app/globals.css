@@ -139,6 +139,21 @@
     @apply font-sans;
     }
 }
+/**
+ * Toasts sit above dialogs.
+ *
+ * Every overlay shadcn ships — dialog, alert dialog, sheet, popover — lands on
+ * `z-50`, and a dialog opened afterwards portals in later, so it wins the tie.
+ * That leaves a toast raised *by* a dialog sitting under its backdrop, blurred
+ * and unreadable: exactly what "that password doesn't match" must not be.
+ *
+ * Set here rather than on `ToastViewport` because `components/ui` belongs to
+ * the shadcn CLI and would lose the change on the next regeneration.
+ */
+[data-slot="toast-viewport"] {
+  z-index: 100;
+}
+
 @keyframes typing-dot {
   0%,
   80%,
