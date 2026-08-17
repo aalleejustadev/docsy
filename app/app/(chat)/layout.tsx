@@ -1,5 +1,7 @@
 import { cookies } from "next/headers"
 
+import { planLabel } from "@/lib/billing"
+import { getWorkspacePlan } from "@/lib/billing-store"
 import { listChats } from "@/lib/chat-store"
 import { requireOrganization, requireSession } from "@/lib/session"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
@@ -25,16 +27,21 @@ export default async function ChatLayout({
 }>) {
   const session = await requireSession()
   const organization = await requireOrganization()
-  const [chats, cookieStore] = await Promise.all([
+  const [chats, cookieStore, planId] = await Promise.all([
     listChats(organization.id),
     cookies(),
+    getWorkspacePlan(organization.id),
   ])
 
   return (
     <SidebarProvider
       defaultOpen={cookieStore.get(SIDEBAR_COOKIE_NAME)?.value !== "false"}
     >
-      <ChatSidebar user={session.user} chats={chats} />
+      <ChatSidebar
+        user={session.user}
+        chats={chats}
+        planLabel={planLabel(planId)}
+      />
 
       <SidebarInset className="h-svh min-w-0 overflow-hidden">
         {children}

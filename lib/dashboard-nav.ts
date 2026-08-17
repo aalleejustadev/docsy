@@ -134,5 +134,6 @@ export function workspaceInitials(name: string) {
     .join("")
 }
 
-/** Placeholder plan label under the user's name until billing lands. */
-export const defaultPlanLabel = "Pro plan"
+// The plan label under the user's name is no longer a constant — it's the
+// workspace's entitlement. `planLabel` in `lib/billing.ts` formats it, and each
+// sidebar takes it as a prop from its layout.

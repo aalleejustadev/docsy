@@ -23,6 +23,8 @@ app/
     onboarding/         "/app/onboarding" — name your organization, bare header
   api/auth/[...all]/    Better Auth route handler
   api/avatar/           profile pictures: POST/DELETE here, GET [userId]
+  api/billing/          checkout/ opens Stripe Checkout, portal/ opens the Customer Portal
+  api/webhooks/stripe/  the only place a paid plan is granted
 proxy.ts                Next 16 middleware: optimistic cookie gate for /app
 components/
   ui/                   shadcn primitives — owned by the shadcn CLI, don't hand-edit
@@ -43,6 +45,9 @@ lib/
   auth-client.ts        Better Auth React client + inferred session types
   auth-providers.ts     social provider registry, env-gated
   avatar.ts             avatar limits, magic-byte sniffing, URL builder
+  billing.ts            plans, per-plan limits, entitled statuses — client-safe
+  billing-store.ts      subscription reads/writes; getWorkspacePlan is the entitlement
+  stripe.ts             Stripe client + price-id ↔ plan mapping — server only
   db.ts                 Prisma client singleton (Neon driver adapter)
   email/                Resend transport + transactional templates
   dashboard-nav.ts      /app nav groups, route→title lookup, workspace helpers
@@ -67,7 +72,8 @@ Rules of thumb:
 - Signed-in routing has two layers: `proxy.ts` bounces anyone without a session *cookie* off `/app` (no database hit), and `app/app/layout.tsx` verifies the session for real. Signed-in visitors are sent to `/app` from the landing page via `redirectIfSignedIn()`, and by the auth dialogs after a successful sign-in.
 - A workspace *is* a Better Auth organization. Everything under `app/app/(workspace)/` calls `requireOrganization()` and bounces to `/app/onboarding` when the user has none; onboarding bounces back once they do. Guards are `lib/session.ts` helpers, never inline `auth.api` calls in a page.
 - Auth is a modal, not a page. Any CTA that used to link to `/sign-up` renders `<AuthDialogTrigger mode="sign-up">` instead; `AuthDialogProvider` owns both dialogs and lives in the marketing layout so header and page share one instance. Only flows an email link has to land on get a real route.
-- Never import `lib/auth.ts` from a client component — it pulls the database in. Client code uses `lib/auth-client.ts`, which re-exports the same session types.
+- Never import `lib/auth.ts` from a client component — it pulls the database in. Client code uses `lib/auth-client.ts`, which re-exports the same session types. Same split for billing: `lib/billing.ts` is client-safe, `lib/stripe.ts` and `lib/billing-store.ts` are not.
+- A plan is an entitlement, never a flag. `getWorkspacePlan()` returns `free` unless the workspace's `subscription` row carries a Stripe status in `ENTITLED_STATUSES`, and that row is only ever written from Stripe's own data — by the webhook, or by the checkout-return reconcile that re-reads the session from Stripe. No client request can move a workspace onto a paid plan, and a lapsed subscription drops back to free limits on the next request without a downgrade job. New per-plan limits go in `PLAN_QUESTION_LIMITS`' neighbourhood and read the plan through that same helper.
 - `Avatar` is the one model in `schema.prisma` Better Auth doesn't own — profile pictures are bytes in Postgres, served by `app/api/avatar/[userId]`, with `user.image` holding that URL. The CLI leaves it alone when it regenerates, but check it's still there after `auth:generate`.
 - Restart `npm run dev` after any `db:generate`. `lib/db.ts` caches the client on `globalThis` in dev, so a running server keeps the client it started with and new models come back `undefined`.
 - After changing auth options or plugins: `npm run auth:generate && npm run db:migrate`. The Better Auth CLI rewrites `schema.prisma` in Prisma 6 shape (no generator `output`, a `url` back in the datasource); `auth:generate` chains `scripts/sync-auth-schema.mjs` to put both back, so don't call the CLI directly.

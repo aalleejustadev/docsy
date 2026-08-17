@@ -1,5 +1,7 @@
 import { cookies } from "next/headers"
 
+import { planLabel } from "@/lib/billing"
+import { getWorkspacePlan } from "@/lib/billing-store"
 import { getNavCounts } from "@/lib/chat-store"
 import { requireOrganization, requireSession } from "@/lib/session"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
@@ -21,9 +23,10 @@ export default async function WorkspaceLayout({
 }>) {
   const session = await requireSession()
   const organization = await requireOrganization()
-  const [cookieStore, counts] = await Promise.all([
+  const [cookieStore, counts, planId] = await Promise.all([
     cookies(),
     getNavCounts(organization.id),
+    getWorkspacePlan(organization.id),
   ])
 
   return (
@@ -34,6 +37,7 @@ export default async function WorkspaceLayout({
         user={session.user}
         workspaceName={organization.name}
         counts={counts}
+        planLabel={planLabel(planId)}
       />
 
       <SidebarInset className="min-w-0">

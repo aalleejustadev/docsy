@@ -1,8 +1,12 @@
 import { cache } from "react"
 
+import {
+  getWorkspacePlan,
+  getWorkspaceQuestionLimit,
+} from "@/lib/billing-store"
+import { planQuestionLimit, type PlanId } from "@/lib/billing"
 import { db } from "@/lib/db"
 import {
-  MONTHLY_QUESTION_LIMIT,
   questionAllowance,
   toPlainText,
   type QuestionAllowance,
@@ -76,12 +80,19 @@ export async function countQuestionsThisMonth(organizationId: string) {
  * What's left of the month's allowance.
  *
  * The one place that decides whether another question may be asked — the
- * composer shows what it returns, and the messages route refuses on it.
+ * composer shows what it returns, and the messages route refuses on it. The
+ * ceiling is the workspace's plan, so a lapsed subscription tightens it on the
+ * very next question without anything having to run a downgrade.
  */
 export async function getQuestionAllowance(
   organizationId: string
 ): Promise<QuestionAllowance> {
-  return questionAllowance(await countQuestionsThisMonth(organizationId))
+  const [used, limit] = await Promise.all([
+    countQuestionsThisMonth(organizationId),
+    getWorkspaceQuestionLimit(organizationId),
+  ])
+
+  return questionAllowance(used, limit)
 }
 
 /**
@@ -559,7 +570,7 @@ export async function getUsage(organizationId: string): Promise<UsageView> {
   return {
     period,
     questions,
-    questionLimit: MONTHLY_QUESTION_LIMIT,
+    questionLimit: await getWorkspaceQuestionLimit(organizationId),
     documentsIndexed,
     citations,
     averageAnswerSeconds:
@@ -695,13 +706,17 @@ export async function getChat(
   if (!chat) return null
 
   const last = chat.messages.at(-1)
-  const questionsThisMonth = await countQuestionsThisMonth(organizationId)
+  const [questionsThisMonth, questionLimit] = await Promise.all([
+    countQuestionsThisMonth(organizationId),
+    getWorkspaceQuestionLimit(organizationId),
+  ])
 
   return {
     id: chat.id,
     title: chat.title,
     documents: chat.documents.map((link) => link.document),
     questionsThisMonth,
+    questionLimit,
     // The seeded analysis request is context for Claude, not part of the thread.
     messages: chat.messages
       .filter((message) => !message.hidden)
@@ -995,22 +1010,33 @@ export type WorkspaceStats = {
   documentsPending: number
   /** Questions asked this calendar month, against the plan's allowance. */
   questionsThisMonth: number
+  /** The plan the workspace is entitled to — `free` unless Stripe says otherwise. */
+  planId: PlanId
+  /** That plan's monthly questions; `Infinity` on Business. */
+  questionLimit: number
 }
 
 /** The headline numbers on the dashboard home page. */
 export async function getWorkspaceStats(
   organizationId: string
 ): Promise<WorkspaceStats> {
-  const [documentsIndexed, documentsPending, questionsThisMonth] =
+  const [documentsIndexed, documentsPending, questionsThisMonth, planId] =
     await Promise.all([
       db.document.count({ where: { organizationId, status: "READY" } }),
       db.document.count({
         where: { organizationId, status: { not: "READY" } },
       }),
       countQuestionsThisMonth(organizationId),
+      getWorkspacePlan(organizationId),
     ])
 
-  return { documentsIndexed, documentsPending, questionsThisMonth }
+  return {
+    documentsIndexed,
+    documentsPending,
+    questionsThisMonth,
+    planId,
+    questionLimit: planQuestionLimit(planId),
+  }
 }
 
 /** The newest uploads, for the home page's "Recent documents" list. */

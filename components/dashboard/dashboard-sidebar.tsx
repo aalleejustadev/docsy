@@ -14,7 +14,6 @@ import {
   APP_ROOT,
   BILLING_ROUTE,
   dashboardNav,
-  defaultPlanLabel,
   isDashboardNavItemActive,
   SETTINGS_ROUTE,
   workspaceInitials,
@@ -54,12 +53,15 @@ function DashboardSidebar({
   user,
   workspaceName,
   counts,
+  planLabel,
 }: {
   user: SessionUser
   /** The active organization's name, resolved by the workspace layout. */
   workspaceName: string
   /** Live chat and document totals for this workspace. */
   counts: DashboardNavCounts
+  /** "Free plan" / "Pro plan" — the workspace's entitlement, from the layout. */
+  planLabel: string
 }) {
   const pathname = usePathname()
 
@@ -70,10 +72,12 @@ function DashboardSidebar({
           <DocsyLogo />
         </Link>
 
-        <Button size="lg" className="w-full cursor-pointer">
-          <PlusIcon />
-          New chat
-        </Button>
+        <Link href="/app/chats">
+          <Button size="lg" className="w-full cursor-pointer">
+            <PlusIcon />
+            New chat
+          </Button>
+        </Link>
       </SidebarHeader>
 
       <SidebarContent className="gap-1">
@@ -174,7 +178,7 @@ function DashboardSidebar({
                   {user.name || user.email}
                 </span>
                 <span className="truncate text-xs text-muted-foreground">
-                  {defaultPlanLabel}
+                  {planLabel}
                 </span>
               </div>
               <ChevronsUpDownIcon className="text-muted-foreground" />

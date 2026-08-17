@@ -1,8 +1,9 @@
 import Link from "next/link"
 
-import { MONTHLY_QUESTION_LIMIT } from "@/lib/chat"
+import { planName } from "@/lib/billing"
+import { isUnlimited } from "@/lib/chat"
 import { getWorkspaceStats } from "@/lib/chat-store"
-import { BILLING_ROUTE, defaultPlanLabel } from "@/lib/dashboard-nav"
+import { BILLING_ROUTE } from "@/lib/dashboard-nav"
 import { requireOrganization } from "@/lib/session"
 import { cn } from "@/lib/utils"
 import { Progress } from "@/components/ui/progress"
@@ -43,11 +44,18 @@ function StatTile({
  */
 async function HomeStats() {
   const organization = await requireOrganization()
-  const { documentsIndexed, documentsPending, questionsThisMonth } =
-    await getWorkspaceStats(organization.id)
+  const {
+    documentsIndexed,
+    documentsPending,
+    questionsThisMonth,
+    planId,
+    questionLimit,
+  } = await getWorkspaceStats(organization.id)
 
-  const ratio = questionsThisMonth / MONTHLY_QUESTION_LIMIT
-  const plan = defaultPlanLabel.replace(/\s*plan$/i, "")
+  // An unlimited allowance has no ratio to draw, so the meter reads as empty
+  // rather than as a bar that can never move.
+  const unlimited = isUnlimited(questionLimit)
+  const ratio = unlimited ? 0 : questionsThisMonth / questionLimit
 
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -69,13 +77,17 @@ async function HomeStats() {
         <span className="text-3xl font-bold tracking-tight">
           {questionsThisMonth}
           <span className="ml-1 text-lg font-normal text-muted-foreground">
-            / {MONTHLY_QUESTION_LIMIT}
+            {unlimited ? "this month" : `/ ${questionLimit}`}
           </span>
         </span>
 
         <Progress
           value={Math.min(100, Math.round(ratio * 100))}
-          aria-label={`${questionsThisMonth} of ${MONTHLY_QUESTION_LIMIT} questions used this month`}
+          aria-label={
+            unlimited
+              ? `${questionsThisMonth} questions asked this month, on an unlimited plan`
+              : `${questionsThisMonth} of ${questionLimit} questions used this month`
+          }
           className={cn(
             "mt-auto **:data-[slot=progress-track]:h-1.5 **:data-[slot=progress-track]:bg-brand/15",
             "**:data-[slot=progress-indicator]:rounded-full",
@@ -84,16 +96,18 @@ async function HomeStats() {
         />
       </StatTile>
 
-      {/* Still the only figure here that isn't measured: there's no billing
-          model yet, so the plan is whatever `defaultPlanLabel` says. */}
+      {/* The workspace's entitlement, not a label: `planId` is `free` until a
+          Stripe subscription says otherwise. */}
       <StatTile label="Current plan">
         <span className="flex items-center gap-3">
-          <span className="text-3xl font-bold tracking-tight">{plan}</span>
+          <span className="text-3xl font-bold tracking-tight">
+            {planName(planId)}
+          </span>
           <Link
             href={BILLING_ROUTE}
             className="rounded-md bg-brand/15 px-2 py-1 text-xs font-medium text-brand transition-colors hover:bg-brand/25"
           >
-            Manage
+            {planId === "free" ? "Upgrade" : "Manage"}
           </Link>
         </span>
       </StatTile>

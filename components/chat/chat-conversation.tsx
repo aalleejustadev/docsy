@@ -7,7 +7,7 @@ import { PaperclipIcon } from "lucide-react"
 import {
   allowanceSpentMessage,
   chatRoute,
-  MONTHLY_QUESTION_LIMIT,
+  formatQuestionCount,
   type ChatDetail,
   type ChatMessageView,
   type ChatSource,
@@ -253,8 +253,9 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
     Math.max(0, questionsAsked(messages) - questionsAsked(chat.messages))
 
   // The server decides this for real — see the messages route. Here it only
-  // has to stop the composer offering a question that would be refused.
-  const allowanceSpent = questionsThisMonth >= MONTHLY_QUESTION_LIMIT
+  // has to stop the composer offering a question that would be refused. The
+  // ceiling arrives with the chat, because it depends on the workspace's plan.
+  const allowanceSpent = questionsThisMonth >= chat.questionLimit
   const [activeCitation, setActiveCitation] =
     React.useState<ActiveCitation | null>(() => {
       const source = [...chat.messages]
@@ -468,7 +469,7 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
               defaultValue={carried.autoAsk ? "" : carried.question}
               placeholder={
                 allowanceSpent
-                  ? allowanceSpentMessage()
+                  ? allowanceSpentMessage(chat.questionLimit)
                   : "Ask a follow-up about your documents…"
               }
               footer={
@@ -502,7 +503,10 @@ function ChatConversation({ chat }: { chat: ChatDetail }) {
                       allowanceSpent && "text-destructive"
                     )}
                   >
-                    {questionsThisMonth} / {MONTHLY_QUESTION_LIMIT} questions
+                    {formatQuestionCount(
+                      questionsThisMonth,
+                      chat.questionLimit
+                    )}
                   </span>
                 </>
               }

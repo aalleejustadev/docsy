@@ -1,6 +1,7 @@
 import Link from "next/link"
 import { ArrowRightIcon } from "lucide-react"
 
+import { isUnlimited } from "@/lib/chat"
 import { BILLING_ROUTE } from "@/lib/dashboard-nav"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -25,7 +26,10 @@ function UsageAllowance({
   questions: number
   limit: number
 }) {
-  const ratio = questions / limit
+  // Business has no ceiling, so there is no ratio to draw and nothing to count
+  // down to — the card shows what was asked and leaves the meter empty.
+  const unlimited = isUnlimited(limit)
+  const ratio = unlimited ? 0 : questions / limit
   const percent = Math.min(100, Math.round(ratio * 100))
   const remaining = Math.max(0, limit - questions)
 
@@ -38,7 +42,7 @@ function UsageAllowance({
           <p className="mt-1 text-4xl font-bold tracking-tight">
             {questions}
             <span className="ml-1.5 text-lg font-normal text-muted-foreground">
-              / {limit}
+              {unlimited ? "of unlimited" : `/ ${limit}`}
             </span>
           </p>
         </div>
@@ -50,14 +54,18 @@ function UsageAllowance({
           className="cursor-pointer"
           render={<Link href={BILLING_ROUTE} />}
         >
-          Upgrade for more
+          {unlimited ? "Manage plan" : "Upgrade for more"}
           <ArrowRightIcon data-icon="inline-end" />
         </Button>
       </div>
 
       <Progress
         value={percent}
-        aria-label={`${questions} of ${limit} questions used this month`}
+        aria-label={
+          unlimited
+            ? `${questions} questions asked this month, on an unlimited plan`
+            : `${questions} of ${limit} questions used this month`
+        }
         className={cn(
           "mt-4 **:data-[slot=progress-track]:h-2 **:data-[slot=progress-track]:bg-brand/15",
           "**:data-[slot=progress-indicator]:rounded-full",
@@ -67,11 +75,13 @@ function UsageAllowance({
 
       <div className="mt-2 flex items-center justify-between font-mono text-sm text-muted-foreground">
         <span>
-          {remaining === 0
-            ? "No questions remaining"
-            : `${remaining} ${remaining === 1 ? "question" : "questions"} remaining`}
+          {unlimited
+            ? "Unlimited questions on this plan"
+            : remaining === 0
+              ? "No questions remaining"
+              : `${remaining} ${remaining === 1 ? "question" : "questions"} remaining`}
         </span>
-        <span>{percent}%</span>
+        <span>{unlimited ? "" : `${percent}%`}</span>
       </div>
     </div>
   )

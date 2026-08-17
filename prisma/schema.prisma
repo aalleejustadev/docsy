@@ -147,6 +147,47 @@ model Avatar {
   @@map("avatar")
 }
 
+/// Not a Better Auth model. What Stripe knows about a workspace's subscription,
+/// mirrored here so rendering a page never has to call Stripe. Like `Avatar`,
+/// it carries a plain `organizationId` rather than a relation, so
+/// `auth:generate` can rewrite the models above without knowing about it.
+///
+/// Written by the webhook handler and by the checkout-return reconcile, both of
+/// which take their values from Stripe — never from a client request. That is
+/// what makes `planId` an entitlement rather than a wish: a row only reaches a
+/// paid plan with an entitled `status` once Stripe says the money arrived.
+model Subscription {
+  id                   String    @id @default(cuid())
+  /// One workspace, one subscription.
+  organizationId       String    @unique
+  /// Created before checkout, so an abandoned checkout still leaves a customer
+  /// to reuse. On its own it grants nothing.
+  stripeCustomerId     String    @unique
+  stripeSubscriptionId String?   @unique
+  /// Stripe's status verbatim — `active`, `trialing`, `past_due`, `canceled`.
+  /// Null until a subscription exists. See `isEntitled` in `lib/billing.ts`.
+  status               String?
+  /// `free`, `pro` or `business`, resolved from the price Stripe billed.
+  planId               String    @default("free")
+  priceId              String?
+  /// `monthly` or `annual`, for the "$19 / month" line.
+  interval             String?
+  /// End of the paid period: the renewal date, or the day access lapses when
+  /// `cancelAtPeriodEnd` is set.
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean   @default(false)
+  /// The card on file, for the payment-method row. Brand and last four only —
+  /// the number never touches this database.
+  cardBrand            String?
+  cardLast4            String?
+  cardExpMonth         Int?
+  cardExpYear          Int?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@map("subscription")
+}
+
 /// Not a Better Auth model. Uploaded sources live in Postgres beside the text
 /// Claude reads. Like `Avatar`, these carry plain `userId`/`organizationId`
 /// columns rather than relations, so `auth:generate` can rewrite the models

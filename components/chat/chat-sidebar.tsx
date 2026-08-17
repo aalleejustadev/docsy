@@ -14,12 +14,7 @@ import {
 
 import type { SessionUser } from "@/lib/auth-client"
 import { chatRoute, CHATS_ROUTE, type ChatSummary } from "@/lib/chat"
-import {
-  APP_ROOT,
-  BILLING_ROUTE,
-  defaultPlanLabel,
-  SETTINGS_ROUTE,
-} from "@/lib/dashboard-nav"
+import { APP_ROOT, BILLING_ROUTE, SETTINGS_ROUTE } from "@/lib/dashboard-nav"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -64,10 +59,13 @@ const accountMenuItems = [
 function ChatSidebar({
   user,
   chats,
+  planLabel,
 }: {
   user: SessionUser
   /** This workspace's conversations, newest first. */
   chats: ChatSummary[]
+  /** "Free plan" / "Pro plan" — the workspace's entitlement, from the layout. */
+  planLabel: string
 }) {
   const pathname = usePathname()
   const router = useRouter()
@@ -230,7 +228,7 @@ function ChatSidebar({
                   {user.name || user.email}
                 </span>
                 <span className="truncate text-xs text-muted-foreground">
-                  {defaultPlanLabel}
+                  {planLabel}
                 </span>
               </div>
               <ChevronsUpDownIcon className="text-muted-foreground" />
