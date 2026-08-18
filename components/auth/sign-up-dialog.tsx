@@ -2,10 +2,12 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
+import { LockIcon } from "lucide-react"
 
 import { signUp } from "@/lib/auth-client"
 import type { SocialProviderId } from "@/lib/auth-providers"
 import { APP_ROOT } from "@/lib/dashboard-nav"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import {
   AuthDialogShell,
   AuthSwitchButton,
@@ -25,6 +27,7 @@ function SignUpDialog({
   onOpenChange,
   onSwitchToSignIn,
   socialProviders = [],
+  allowSignUps = true,
   callbackURL = APP_ROOT,
 }: {
   open: boolean
@@ -32,6 +35,8 @@ function SignUpDialog({
   onSwitchToSignIn: () => void
   /** Provider ids with credentials configured, resolved on the server. */
   socialProviders?: SocialProviderId[]
+  /** False while an admin has registration closed — see the Security tab. */
+  allowSignUps?: boolean
   /** Where the confirmation link in the verification email lands. */
   callbackURL?: string
 }) {
@@ -92,56 +97,69 @@ function SignUpDialog({
         </>
       }
     >
-      <div className="flex flex-col gap-5">
-        <SocialAuthButtons
-          providers={socialProviders}
-          callbackURL={callbackURL}
-          disabled={pending}
-          onError={(message) => setError(message || null)}
-        />
-        {socialProviders.length > 0 && <AuthDivider />}
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <AuthFormError>{error}</AuthFormError>
-
-          <AuthField
-            id="sign-up-name"
-            name="name"
-            label="Full name"
-            placeholder="Ada Lovelace"
-            autoComplete="name"
-            required
+      {!allowSignUps ? (
+        // The server refuses these anyway; showing the form first would only
+        // collect a password on the way to being told no.
+        <Alert>
+          <LockIcon />
+          <AlertTitle>New sign-ups are closed right now.</AlertTitle>
+          <AlertDescription>
+            Docsy isn&apos;t accepting new accounts at the moment. If you
+            already have one, sign in instead.
+          </AlertDescription>
+        </Alert>
+      ) : (
+        <div className="flex flex-col gap-5">
+          <SocialAuthButtons
+            providers={socialProviders}
+            callbackURL={callbackURL}
             disabled={pending}
+            onError={(message) => setError(message || null)}
           />
-          <AuthField
-            id="sign-up-email"
-            name="email"
-            type="email"
-            label="Email address"
-            placeholder="you@company.com"
-            autoComplete="email"
-            required
-            disabled={pending}
-          />
-          <AuthField
-            id="sign-up-password"
-            name="password"
-            type="password"
-            label="Password"
-            placeholder="At least 8 characters"
-            autoComplete="new-password"
-            minLength={8}
-            required
-            disabled={pending}
-          />
+          {socialProviders.length > 0 && <AuthDivider />}
 
-          <div className="mt-1">
-            <AuthSubmitButton pending={pending}>
-              Create account
-            </AuthSubmitButton>
-          </div>
-        </form>
-      </div>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <AuthFormError>{error}</AuthFormError>
+
+            <AuthField
+              id="sign-up-name"
+              name="name"
+              label="Full name"
+              placeholder="Ada Lovelace"
+              autoComplete="name"
+              required
+              disabled={pending}
+            />
+            <AuthField
+              id="sign-up-email"
+              name="email"
+              type="email"
+              label="Email address"
+              placeholder="you@company.com"
+              autoComplete="email"
+              required
+              disabled={pending}
+            />
+            <AuthField
+              id="sign-up-password"
+              name="password"
+              type="password"
+              label="Password"
+              placeholder="At least 8 characters"
+              autoComplete="new-password"
+              minLength={8}
+              required
+              disabled={pending}
+            />
+
+            <div className="mt-1">
+              <AuthSubmitButton pending={pending}>
+                Create account
+              </AuthSubmitButton>
+            </div>
+          </form>
+        </div>
+      )}
     </AuthDialogShell>
   )
 }

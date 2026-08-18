@@ -31,7 +31,11 @@ function LibraryStatusTabs({
   return (
     <nav
       aria-label="Filter documents by status"
-      className="inline-flex h-10 items-center gap-1 rounded-lg bg-muted p-1"
+      // Four pills plus their counts are a few pixels wider than a small phone,
+      // so the strip scrolls rather than pushing the page sideways. `max-w-full`
+      // is what lets an `inline-flex` shrink below its content in the first
+      // place.
+      className="inline-flex h-10 max-w-full scrollbar-none items-center gap-1 overflow-x-auto rounded-lg bg-muted p-1"
     >
       {libraryStatusFilters.map((filter) => {
         const isActive = filter.value === status

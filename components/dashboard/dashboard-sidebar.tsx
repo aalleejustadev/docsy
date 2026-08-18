@@ -13,7 +13,7 @@ import type { SessionUser } from "@/lib/auth-client"
 import {
   APP_ROOT,
   BILLING_ROUTE,
-  dashboardNav,
+  visibleDashboardNav,
   isDashboardNavItemActive,
   SETTINGS_ROUTE,
   workspaceInitials,
@@ -54,6 +54,7 @@ function DashboardSidebar({
   workspaceName,
   counts,
   planLabel,
+  isAdmin,
 }: {
   user: SessionUser
   /** The active organization's name, resolved by the workspace layout. */
@@ -62,8 +63,11 @@ function DashboardSidebar({
   counts: DashboardNavCounts
   /** "Free plan" / "Pro plan" — the workspace's entitlement, from the layout. */
   planLabel: string
+  /** Admins get the Admin entry; nobody else is shown it exists. */
+  isAdmin: boolean
 }) {
   const pathname = usePathname()
+  const nav = visibleDashboardNav(isAdmin)
 
   return (
     <Sidebar>
@@ -90,7 +94,7 @@ function DashboardSidebar({
           </span>
         </div>
 
-        {dashboardNav.map((group, index) => (
+        {nav.map((group, index) => (
           <SidebarGroup key={group.title ?? index} className="gap-1 px-3 py-0">
             {group.title && (
               <SidebarGroupLabel className="mt-3 px-2 text-[0.6875rem] font-bold tracking-[0.08em] text-muted-foreground uppercase">

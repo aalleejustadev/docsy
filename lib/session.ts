@@ -2,7 +2,8 @@ import { cache } from "react"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 
-import { auth } from "@/lib/auth"
+import { isAdminRole } from "@/lib/admin"
+import { auth, bootstrapAdminIds } from "@/lib/auth"
 import { APP_ROOT, ONBOARDING_ROUTE } from "@/lib/dashboard-nav"
 
 /**
@@ -21,6 +22,39 @@ export async function requireSession() {
 
   if (!session) {
     redirect("/")
+  }
+
+  return session
+}
+
+/**
+ * Whether a signed-in user may operate the admin console.
+ *
+ * Two ways in, and both are server-side facts: the role on their row, or the
+ * bootstrap list in the environment. Nothing a browser sends is consulted.
+ */
+export function isAdminUser(user: { id: string; role?: string | null }) {
+  return isAdminRole(user.role) || bootstrapAdminIds.includes(user.id)
+}
+
+/** True when the current request is being made by an admin. */
+export const isCurrentUserAdmin = cache(async () => {
+  const session = await getServerSession()
+
+  return session ? isAdminUser(session.user) : false
+})
+
+/**
+ * The guard for `/app/admin`.
+ *
+ * Sends a non-admin to the app root rather than a 403 page: the console isn't
+ * something they were refused, it's something that isn't theirs to know about.
+ */
+export async function requireAdmin() {
+  const session = await requireSession()
+
+  if (!isAdminUser(session.user)) {
+    redirect(APP_ROOT)
   }
 
   return session

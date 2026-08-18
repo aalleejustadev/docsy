@@ -26,11 +26,13 @@ export function isPaidPlanId(value: string): value is PaidPlanId {
  * itself — all of them read as `free` here, so the only way to hold a paid
  * plan is for Stripe to be holding the money for it.
  */
-const ENTITLED_STATUSES = new Set(["active", "trialing"])
+export const ENTITLED_STATUSES = ["active", "trialing"] as const
+
+const ENTITLED_STATUS_SET: ReadonlySet<string> = new Set(ENTITLED_STATUSES)
 
 export function isEntitled(status: string | null | undefined) {
   return (
-    status !== null && status !== undefined && ENTITLED_STATUSES.has(status)
+    status !== null && status !== undefined && ENTITLED_STATUS_SET.has(status)
   )
 }
 
@@ -72,6 +74,14 @@ export function nextPlanUp(planId: PlanId): PaidPlanId | null {
   return null
 }
 
+/** Where an entitlement came from — see the `source` column. */
+export type BillingSource = "stripe" | "admin"
+
+/** True for a plan an admin comped: real entitlement, no money behind it. */
+export function isAdminGranted(source: string | null | undefined) {
+  return source === "admin"
+}
+
 export type BillingCard = {
   /** "visa", "amex" — Stripe's own brand id, uppercased for display. */
   brand: string
@@ -101,6 +111,7 @@ export type BillingView = {
   /** ISO timestamp — the renewal date, or when access lapses if cancelling. */
   currentPeriodEnd: string | null
   cancelAtPeriodEnd: boolean
+  source: BillingSource
   card: BillingCard | null
   invoices: BillingInvoice[]
   /** False when the Stripe env vars are missing — the tab says so instead of
@@ -127,6 +138,12 @@ export function formatBillingDate(iso: string) {
  */
 export function planTerms(view: BillingView) {
   const plan = planCatalogEntry(view.planId)
+
+  // A comped plan has no price and no renewal — saying "$19 / month" under it
+  // would invoice somebody in their head for money they were never charged.
+  if (isAdminGranted(view.source) && view.planId !== "free") {
+    return "Granted by an admin · no payment on file"
+  }
 
   if (view.planId === "free") {
     // Says nothing about a card: a workspace that cancelled still has one on

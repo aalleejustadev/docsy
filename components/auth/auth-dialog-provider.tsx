@@ -39,6 +39,7 @@ function useAuthDialog() {
  */
 function AuthDialogProvider({
   socialProviders = [],
+  allowSignUps = true,
   children,
 }: {
   /**
@@ -46,6 +47,12 @@ function AuthDialogProvider({
    * down, since the client bundle can't read the OAuth env vars.
    */
   socialProviders?: SocialProviderId[]
+  /**
+   * The admin console's "Allow new sign-ups" switch, read on the server. The
+   * server refuses either way — this is so a closed door says so up front
+   * instead of after someone has filled the form in.
+   */
+  allowSignUps?: boolean
   children: React.ReactNode
 }) {
   const [mode, setMode] = React.useState<AuthMode | null>(null)
@@ -74,6 +81,7 @@ function AuthDialogProvider({
         onOpenChange={(open) => setMode(open ? "sign-up" : null)}
         onSwitchToSignIn={() => setMode("sign-in")}
         socialProviders={socialProviders}
+        allowSignUps={allowSignUps}
       />
     </AuthDialogContext>
   )

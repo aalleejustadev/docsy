@@ -25,7 +25,10 @@ export async function POST() {
 
   const record = await getSubscriptionRecord(guard.context.organizationId)
 
-  if (!record) {
+  // No Stripe customer means nothing to manage: either they've never opened
+  // checkout, or their plan was granted from the admin console and no money has
+  // ever been involved.
+  if (!record?.stripeCustomerId) {
     return NextResponse.json(
       { error: "This workspace has no billing history yet." },
       { status: 400 }

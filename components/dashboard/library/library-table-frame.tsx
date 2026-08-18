@@ -35,7 +35,11 @@ function LibraryTableFrame({
 }) {
   return (
     <div className="mt-5 overflow-hidden rounded-xl border bg-card">
-      <Table className="table-fixed">
+      {/* Same reason as the admin users table: the pinned columns add up to
+          480px, so without a floor the Name column collapses to nothing on a
+          phone. Below this width the table scrolls sideways inside `Table`'s
+          container rather than crushing its first column. */}
+      <Table className="min-w-184 table-fixed">
         <TableHeader>
           <TableRow className="bg-muted/40 hover:bg-muted/40">
             {columns.map((column) => (

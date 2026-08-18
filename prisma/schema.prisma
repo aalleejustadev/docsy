@@ -26,6 +26,11 @@ model User {
   members     Member[]
   invitations Invitation[]
 
+  role       String?
+  banned     Boolean?  @default(false)
+  banReason  String?
+  banExpires DateTime?
+
   @@unique([email])
   @@map("user")
 }
@@ -42,6 +47,8 @@ model Session {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   activeOrganizationId String?
+
+  impersonatedBy String?
 
   @@unique([token])
   @@index([userId])
@@ -147,6 +154,55 @@ model Avatar {
   @@map("avatar")
 }
 
+/// Not a Better Auth model. The admin console's activity log: who did what to
+/// the app, and when.
+///
+/// Deliberately append-only and deliberately denormalised. `actorName` and
+/// `description` are snapshots of how things read *at the time* — an audit
+/// entry that changes when somebody renames themselves, or empties when an
+/// account is deleted, is not much of an audit entry. Nothing cascades into
+/// this table for the same reason.
+model AdminLog {
+  id          String   @id @default(cuid())
+  /// The admin who acted. Null means the app itself did it — "System".
+  actorId     String?
+  /// Their name as it was then. Null renders as "System".
+  actorName   String?
+  /// Machine-readable slug, e.g. `user.created` — for filtering and the CSV.
+  action      String
+  /// The sentence after the actor's name, written when the event happened.
+  description String
+  /// What was acted on, when there is one thing: a user id, usually.
+  targetId    String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("adminLog")
+}
+
+/// Not a Better Auth model, and the only single-row table here: the app's own
+/// switches, set from the admin console's Security tab. One row, id `app`.
+///
+/// Defaults matter — they're what the app runs on before an admin ever opens
+/// the page, and `getAppSettings` returns them when the row is missing rather
+/// than failing closed and locking everyone out.
+model AppSetting {
+  id                  String   @id @default("app")
+  /// Off closes public registration. Admins can still create accounts.
+  allowSignUps        Boolean  @default(true)
+  /// Stored, not yet enforceable — there is no two-factor sign-in to require.
+  enforceTwoFactor    Boolean  @default(false)
+  /// On, only admins get past the `/app` boundary.
+  maintenanceMode     Boolean  @default(false)
+  /// Months of chat history kept. Null keeps everything for ever.
+  chatRetentionMonths Int?     @default(12)
+  /// The admin who last saved the page.
+  updatedByUserId     String?
+  updatedAt           DateTime @updatedAt
+
+  @@map("appSetting")
+}
+
 /// Not a Better Auth model. What Stripe knows about a workspace's subscription,
 /// mirrored here so rendering a page never has to call Stripe. Like `Avatar`,
 /// it carries a plain `organizationId` rather than a relation, so
@@ -161,8 +217,9 @@ model Subscription {
   /// One workspace, one subscription.
   organizationId       String    @unique
   /// Created before checkout, so an abandoned checkout still leaves a customer
-  /// to reuse. On its own it grants nothing.
-  stripeCustomerId     String    @unique
+  /// to reuse. On its own it grants nothing. Null on a workspace whose plan was
+  /// granted from the admin console — there's nobody to bill.
+  stripeCustomerId     String?   @unique
   stripeSubscriptionId String?   @unique
   /// Stripe's status verbatim — `active`, `trialing`, `past_due`, `canceled`.
   /// Null until a subscription exists. See `isEntitled` in `lib/billing.ts`.
@@ -182,6 +239,13 @@ model Subscription {
   cardLast4            String?
   cardExpMonth         Int?
   cardExpYear          Int?
+  /// Where this entitlement came from: `stripe` when money moved, `admin` when
+  /// an admin comped it from the console. Kept explicit rather than inferred
+  /// from a null `stripeSubscriptionId`, because the Billing tab has to say
+  /// which one it is and never show a comped plan as a paid one.
+  source               String    @default("stripe")
+  /// The admin who granted it. Null on everything Stripe wrote.
+  grantedByUserId      String?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 

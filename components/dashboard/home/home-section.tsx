@@ -15,7 +15,11 @@ function HomeSection({
   children: React.ReactNode
 }) {
   return (
-    <section>
+    // `min-w-0` because these sit in a grid, and a grid item's default
+    // `min-width: auto` sizes the track to its widest content — one long
+    // filename was stretching the card past the screen and stopping the
+    // truncation inside it from ever applying.
+    <section className="min-w-0">
       <div className="flex items-baseline justify-between gap-4">
         <h3 className="font-semibold">{title}</h3>
 

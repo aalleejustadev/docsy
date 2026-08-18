@@ -1,4 +1,4 @@
-import { getOrganizations, getServerSession } from "@/lib/session"
+import { getOrganizations, getServerSession, isAdminUser } from "@/lib/session"
 
 /**
  * The workspace guard for route handlers.
@@ -45,4 +45,37 @@ export async function requireApiContext(): Promise<ApiGuard> {
     ok: true,
     context: { userId: session.user.id, organizationId: organization.id },
   }
+}
+
+/**
+ * The admin guard for route handlers.
+ *
+ * Deliberately not `requireAdmin()`: that one redirects, which is right for a
+ * page and wrong for `fetch`. A non-admin gets 403 rather than 404 here — the
+ * console's *pages* stay invisible, but an endpoint that has already been found
+ * and called should answer honestly.
+ *
+ * Unlike `requireApiContext` this asks for no organization: an admin acts on
+ * the whole app, not from inside a workspace.
+ */
+export async function requireApiAdmin(): Promise<
+  { ok: true; userId: string } | { ok: false; response: Response }
+> {
+  const session = await getServerSession()
+
+  if (!session) {
+    return {
+      ok: false,
+      response: Response.json({ error: "Not signed in." }, { status: 401 }),
+    }
+  }
+
+  if (!isAdminUser(session.user)) {
+    return {
+      ok: false,
+      response: Response.json({ error: "Admins only." }, { status: 403 }),
+    }
+  }
+
+  return { ok: true, userId: session.user.id }
 }

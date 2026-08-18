@@ -16,11 +16,15 @@ import { getStripe, isBillingConfigured, planForPrice } from "@/lib/stripe"
  * Server-only. The workspace's subscription: what Postgres holds, and the
  * writes that keep it in step with Stripe.
  *
- * Only three things in the codebase write to the `subscription` table, and all
- * three take their values from Stripe: the webhook handler, the reconcile that
- * runs when someone lands back from checkout, and `ensureStripeCustomer` (which
- * writes a customer id and nothing else). No client request can move a
- * workspace onto a paid plan.
+ * Four things write to the `subscription` table. Three take their values from
+ * Stripe — the webhook handler, the reconcile that runs when someone lands back
+ * from checkout, and `ensureStripeCustomer` (which writes a customer id and
+ * nothing else). The fourth is `grantPlan`, which an admin reaches through the
+ * console and which records itself as a grant rather than a payment.
+ *
+ * No *client request* can move a workspace onto a paid plan: the browser can
+ * only ask Stripe for a checkout, or ask the admin API — which checks the
+ * caller's role on the server before granting anything.
  */
 
 /** How many invoices the Billing tab lists. */
@@ -80,7 +84,10 @@ export async function ensureStripeCustomer({
     select: { stripeCustomerId: true },
   })
 
-  if (existing) return existing.stripeCustomerId
+  // A row without a customer is a workspace an admin comped: it has an
+  // entitlement but nobody to bill. Giving it a customer here is what lets a
+  // comped workspace go and buy a real subscription later.
+  if (existing?.stripeCustomerId) return existing.stripeCustomerId
 
   const customer = await getStripe().customers.create({
     email,
@@ -91,11 +98,57 @@ export async function ensureStripeCustomer({
     metadata: { organizationId, organizationName, userId },
   })
 
-  const created = await db.subscription.create({
-    data: { organizationId, stripeCustomerId: customer.id, planId: "free" },
+  const saved = await db.subscription.upsert({
+    where: { organizationId },
+    create: { organizationId, stripeCustomerId: customer.id, planId: "free" },
+    // Only the customer id: an admin-granted plan keeps its entitlement while
+    // they're at the checkout, and loses it only if Stripe replaces the row.
+    update: { stripeCustomerId: customer.id },
   })
 
-  return created.stripeCustomerId
+  return saved.stripeCustomerId!
+}
+
+/**
+ * Comps a workspace onto a paid plan from the admin console.
+ *
+ * This is the one entitlement in the product that money didn't buy, so it is
+ * recorded as exactly that: `source: "admin"` and the admin's own id, with no
+ * Stripe subscription behind it. `isEntitled` treats it like any other active
+ * plan — the difference is provenance, and the Billing tab says so rather than
+ * showing a price nobody is paying.
+ *
+ * A later checkout overwrites the row through `syncSubscription`, which resets
+ * `source` to `stripe`, so a workspace that starts paying stops being comped.
+ */
+export async function grantPlan({
+  organizationId,
+  planId,
+  grantedByUserId,
+}: {
+  organizationId: string
+  planId: PlanId
+  grantedByUserId: string
+}) {
+  const data = {
+    planId,
+    // Deliberately borrows Stripe's vocabulary: everything downstream already
+    // asks `isEntitled(status)`, and a grant is an active entitlement.
+    status: "active",
+    source: "admin",
+    grantedByUserId,
+    // A comp doesn't expire and isn't billed, so there's no period to show.
+    interval: null,
+    priceId: null,
+    currentPeriodEnd: null,
+    cancelAtPeriodEnd: false,
+  }
+
+  return db.subscription.upsert({
+    where: { organizationId },
+    create: { organizationId, ...data },
+    update: data,
+  })
 }
 
 /** The end of the paid period. Stripe moved this onto the item in Basil. */
@@ -172,6 +225,11 @@ export async function syncSubscription(subscription: Stripe.Subscription) {
   const data = {
     stripeCustomerId: customerId,
     stripeSubscriptionId: subscription.id,
+    // Stripe is now the authority on this row, even if an admin comped it
+    // before — money outranks a grant, and the grant's provenance would
+    // otherwise keep the Billing tab claiming nobody is paying.
+    source: "stripe",
+    grantedByUserId: null,
     status: subscription.status,
     planId,
     priceId,
@@ -314,7 +372,7 @@ export async function getBillingView(
 
   let invoices: BillingInvoice[] = []
 
-  if (configured && record) {
+  if (configured && record?.stripeCustomerId) {
     try {
       invoices = await listInvoices(record.stripeCustomerId)
     } catch (error) {
@@ -330,9 +388,11 @@ export async function getBillingView(
     period: (record?.interval as BillingView["period"]) ?? null,
     currentPeriodEnd: record?.currentPeriodEnd?.toISOString() ?? null,
     cancelAtPeriodEnd: record?.cancelAtPeriodEnd ?? false,
+    source: (record?.source as BillingView["source"]) ?? "stripe",
     card,
     invoices,
     configured,
-    hasCustomer: Boolean(record),
+    // The portal needs a Stripe customer, which a comped workspace hasn't got.
+    hasCustomer: Boolean(record?.stripeCustomerId),
   }
 }

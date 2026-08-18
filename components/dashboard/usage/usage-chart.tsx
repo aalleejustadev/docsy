@@ -97,26 +97,32 @@ function UsageChart({ days }: { days: UsageDay[] }) {
         <span>{last ? shortLabel(last.date) : ""}</span>
       </div>
 
-      <table className="sr-only">
-        <caption>
-          Questions asked per day over the last {days.length} days. Busiest day:{" "}
-          {busiest}.
-        </caption>
-        <thead>
-          <tr>
-            <th scope="col">Day</th>
-            <th scope="col">Questions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {days.map((day) => (
-            <tr key={day.date}>
-              <th scope="row">{dayLabel(day.date)}</th>
-              <td>{day.questions}</td>
+      {/* Wrapped rather than `sr-only` on the table itself: a table refuses to
+          shrink below its content, so the class left a full-width box in the
+          layout — visually clipped, but still dragging the page 172px wider
+          on a phone. A div honours the 1px and the table stays inside it. */}
+      <div className="sr-only">
+        <table>
+          <caption>
+            Questions asked per day over the last {days.length} days. Busiest
+            day: {busiest}.
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Day</th>
+              <th scope="col">Questions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {days.map((day) => (
+              <tr key={day.date}>
+                <th scope="row">{dayLabel(day.date)}</th>
+                <td>{day.questions}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </>
   )
 }

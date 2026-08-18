@@ -20,11 +20,16 @@ app/
     (workspace)/        needs an organization: sidebar + header chrome
       page.tsx          "/app" — dashboard home
       settings/         layout.tsx holds the tab strip; one route per tab
+      admin/            "/app/admin" — staff console; layout.tsx holds the tab strip, one route per tab
     onboarding/         "/app/onboarding" — name your organization, bare header
   api/auth/[...all]/    Better Auth route handler
   api/avatar/           profile pictures: POST/DELETE here, GET [userId]
+  api/admin/logs/export GET downloads the activity log as CSV (requireApiAdmin)
+  api/admin/settings/   PATCH saves the Security tab's switches (requireApiAdmin)
+  api/admin/users/      POST creates an account + its workspace (requireApiAdmin)
+  api/cron/retention/   scheduled chat purge, behind CRON_SECRET
   api/billing/          checkout/ opens Stripe Checkout, portal/ opens the Customer Portal
-  api/webhooks/stripe/  the only place a paid plan is granted
+  api/webhooks/stripe/  where a *paid* plan is granted; admin comps go through grantPlan
 proxy.ts                Next 16 middleware: optimistic cookie gate for /app
 components/
   ui/                   shadcn primitives — owned by the shadcn CLI, don't hand-edit
@@ -44,6 +49,12 @@ lib/
   auth.ts               Better Auth server config — the CLI reads this file
   auth-client.ts        Better Auth React client + inferred session types
   auth-providers.ts     social provider registry, env-gated
+  admin.ts              console routes, tabs, overview types — client-safe
+  app-settings.ts       the app's own switches + retention options — client-safe
+  app-settings-store.ts the single settings row, and the retention purge
+  admin-log.ts          every sentence the activity log can contain — client-safe
+  admin-log-store.ts    append-only log writes, reads and the CSV
+  admin-store.ts        the console's cross-workspace counts (guard every caller)
   avatar.ts             avatar limits, magic-byte sniffing, URL builder
   billing.ts            plans, per-plan limits, entitled statuses — client-safe
   billing-store.ts      subscription reads/writes; getWorkspacePlan is the entitlement
@@ -73,6 +84,11 @@ Rules of thumb:
 - A workspace *is* a Better Auth organization. Everything under `app/app/(workspace)/` calls `requireOrganization()` and bounces to `/app/onboarding` when the user has none; onboarding bounces back once they do. Guards are `lib/session.ts` helpers, never inline `auth.api` calls in a page.
 - Auth is a modal, not a page. Any CTA that used to link to `/sign-up` renders `<AuthDialogTrigger mode="sign-up">` instead; `AuthDialogProvider` owns both dialogs and lives in the marketing layout so header and page share one instance. Only flows an email link has to land on get a real route.
 - Never import `lib/auth.ts` from a client component — it pulls the database in. Client code uses `lib/auth-client.ts`, which re-exports the same session types. Same split for billing: `lib/billing.ts` is client-safe, `lib/stripe.ts` and `lib/billing-store.ts` are not.
+- An entitlement records where it came from. `subscription.source` is `stripe` when money moved and `admin` when the console comped it (`grantPlan`, with `grantedByUserId` and no Stripe customer — hence `stripeCustomerId` is nullable). `isEntitled` treats both alike, but the Billing tab must never show a comped plan as a paid one, and the portal needs a real Stripe customer. A later checkout resets `source` to `stripe`.
+- Better Auth's `createOrganization` only honours `body.userId` when it sees **no session** — call it without `headers` to create a workspace *for* someone else. Passing the caller's headers silently makes the caller the owner. There's no permission check on that path, so the route's own `requireApiAdmin()` is the check.
+- The Security tab's switches are enforced, not stored preferences: sign-ups by the `user.create` database hook in `lib/auth.ts` (which lets `/admin/create-user` through), maintenance mode by `app/app/layout.tsx`, retention by `purgeExpiredChats`. If you add a switch there, wire it to the code that honours it — or give it an `unavailable` reason so it renders disabled and says why. `AppSetting` is the one single-row table; `getAppSettings()` falls back to defaults rather than failing closed, because it runs on the `/app` boundary and every sign-up.
+- The activity log is append-only and denormalised on purpose: `recordAdminLog` stores the finished sentence and the actor's name *as they read at the time*, so an entry survives a rename or a deleted account. Write the wording in `lib/admin-log.ts`, never inline. Recording must never fail an action — the writer swallows its own errors. Events that happen through Better Auth's endpoints (ban/unban, password reset) are caught by the `hooks.after` middleware in `lib/auth.ts`, and only when the caller is an admin; a null actor renders as "System".
+- Admin is `user.role`, not an organization role: it spans the whole app, so `lib/admin-store.ts` is the one store that doesn't filter by `organizationId`. Guard **every** admin component with `requireAdmin()`, not just the layout — Next renders a layout and its page concurrently, so a layout-only redirect still lets the page query and stream its data. `ADMIN_USER_IDS` bootstraps the first admin; after that admins promote each other.
 - A plan is an entitlement, never a flag. `getWorkspacePlan()` returns `free` unless the workspace's `subscription` row carries a Stripe status in `ENTITLED_STATUSES`, and that row is only ever written from Stripe's own data — by the webhook, or by the checkout-return reconcile that re-reads the session from Stripe. No client request can move a workspace onto a paid plan, and a lapsed subscription drops back to free limits on the next request without a downgrade job. New per-plan limits go in `PLAN_QUESTION_LIMITS`' neighbourhood and read the plan through that same helper.
 - `Avatar` is the one model in `schema.prisma` Better Auth doesn't own — profile pictures are bytes in Postgres, served by `app/api/avatar/[userId]`, with `user.image` holding that URL. The CLI leaves it alone when it regenerates, but check it's still there after `auth:generate`.
 - Restart `npm run dev` after any `db:generate`. `lib/db.ts` caches the client on `globalThis` in dev, so a running server keeps the client it started with and new models come back `undefined`.

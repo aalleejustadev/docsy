@@ -1,10 +1,24 @@
 import { after } from "next/server"
 import { betterAuth } from "better-auth"
+import {
+  APIError,
+  createAuthMiddleware,
+  getSessionFromCtx,
+} from "better-auth/api"
 import { prismaAdapter } from "better-auth/adapters/prisma"
 import { nextCookies } from "better-auth/next-js"
-import { organization } from "better-auth/plugins"
+import { admin, organization } from "better-auth/plugins"
 
 import { purgeUserData } from "@/lib/account"
+import {
+  describeDeactivated,
+  describePasswordReset,
+  describeReactivated,
+  LOG_ACTIONS,
+} from "@/lib/admin-log"
+import { actorNameFor, recordAdminLog } from "@/lib/admin-log-store"
+import { isAdminRole } from "@/lib/admin"
+import { getAppSettings } from "@/lib/app-settings-store"
 import { configuredSocialProviders } from "@/lib/auth-providers"
 import { db } from "@/lib/db"
 import {
@@ -20,6 +34,18 @@ const isProduction = process.env.NODE_ENV === "production"
 const trustedOrigins =
   process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",")
     .map((origin) => origin.trim())
+    .filter(Boolean) ?? []
+
+/**
+ * User ids that are admins regardless of the role on their row — the way the
+ * first admin exists at all, since promoting someone requires an admin.
+ *
+ * Exported because the console's own guard has to honour the same list; the
+ * plugin only applies it to Better Auth's endpoints.
+ */
+export const bootstrapAdminIds =
+  process.env.ADMIN_USER_IDS?.split(",")
+    .map((id) => id.trim())
     .filter(Boolean) ?? []
 
 export const auth = betterAuth({
@@ -44,6 +70,93 @@ export const auth = betterAuth({
     revokeSessionsOnPasswordReset: true,
     sendResetPassword: async ({ user, url }) => {
       await sendPasswordResetEmail(user.email, url)
+    },
+  },
+
+  hooks: {
+    /**
+     * The activity log's ear on Better Auth's own endpoints.
+     *
+     * Deactivating an account and sending a password reset both happen through
+     * Better Auth rather than through routes of ours, so this is where those
+     * two events are heard. Running *after* the endpoint means only what
+     * actually succeeded is recorded.
+     *
+     * Only admin activity is logged: somebody resetting their own password from
+     * the sign-in dialog is not console activity, and an audit log padded with
+     * it is a worse audit log.
+     */
+    after: createAuthMiddleware(async (ctx) => {
+      const logged = new Set([
+        "/admin/ban-user",
+        "/admin/unban-user",
+        "/request-password-reset",
+      ])
+
+      if (!logged.has(ctx.path)) return
+
+      const session = ctx.context.session ?? (await getSessionFromCtx(ctx))
+      const actor = session?.user
+
+      if (!actor || !isAdminRole((actor as { role?: string }).role)) return
+
+      const actorName = actor.name || actor.email || null
+      const body = (ctx.body ?? {}) as { userId?: string; email?: string }
+
+      if (ctx.path === "/request-password-reset") {
+        if (!body.email) return
+
+        await recordAdminLog({
+          action: LOG_ACTIONS.passwordResetSent,
+          description: describePasswordReset(body.email),
+          actorId: actor.id,
+          actorName,
+        })
+
+        return
+      }
+
+      if (!body.userId) return
+
+      const banned = ctx.path === "/admin/ban-user"
+      const subject = (await actorNameFor(body.userId)) ?? "an account"
+
+      await recordAdminLog({
+        action: banned
+          ? LOG_ACTIONS.userDeactivated
+          : LOG_ACTIONS.userReactivated,
+        description: banned
+          ? describeDeactivated(subject)
+          : describeReactivated(subject),
+        actorId: actor.id,
+        actorName,
+        targetId: body.userId,
+      })
+    }),
+  },
+
+  databaseHooks: {
+    user: {
+      create: {
+        /**
+         * The "Allow new sign-ups" switch, enforced where every route that can
+         * create a user has to pass — email sign-up and the OAuth callback
+         * alike, rather than one guard per entry point.
+         *
+         * Deny by default when registration is closed: the admin console's own
+         * create-user endpoint is the single exception, because that is an
+         * admin deciding to add someone, not the public letting itself in.
+         */
+        before: async (_user, context) => {
+          const { allowSignUps } = await getAppSettings()
+
+          if (allowSignUps || context?.path === "/admin/create-user") return
+
+          throw new APIError("FORBIDDEN", {
+            message: "New sign-ups are closed right now.",
+          })
+        },
+      },
     },
   },
 
@@ -161,6 +274,20 @@ export const auth = betterAuth({
     organization({
       organizationLimit: 5,
       membershipLimit: 100,
+    }),
+
+    // Staff access to the admin console at `/app/admin`. Nothing about it is
+    // per-workspace: an admin operates the whole app, so this is `user.role`
+    // rather than an organization role.
+    //
+    // The role is only ever set by another admin or by hand in the database —
+    // sign-up can't ask for it (`input: false` on the plugin's own field), and
+    // `defaultRole` makes every new account a plain user. `ADMIN_USER_IDS` is
+    // the bootstrap for the first one, before there's an admin to promote them.
+    admin({
+      defaultRole: "user",
+      adminRoles: ["admin"],
+      adminUserIds: bootstrapAdminIds,
     }),
 
     // Must stay last — it writes cookies set during server actions.

@@ -23,6 +23,17 @@ export const SETTINGS_ROUTE = `${APP_ROOT}/settings`
 export const BILLING_ROUTE = `${SETTINGS_ROUTE}/billing`
 export const DANGER_ZONE_ROUTE = `${SETTINGS_ROUTE}/danger-zone`
 
+/**
+ * The admin console's routes live here rather than in `lib/admin.ts` because
+ * the nav below needs them and `lib/admin.ts` already reads `APP_ROOT` from
+ * this file — the other direction would be a cycle. `lib/admin.ts` re-exports
+ * them, so console code has one place to import from.
+ */
+export const ADMIN_ROUTE = `${APP_ROOT}/admin`
+export const ADMIN_USERS_ROUTE = `${ADMIN_ROUTE}/users`
+export const ADMIN_SECURITY_ROUTE = `${ADMIN_ROUTE}/security`
+export const ADMIN_LOGS_ROUTE = `${ADMIN_ROUTE}/logs`
+
 export type DashboardNavSubItem = {
   href: string
   label: string
@@ -45,6 +56,8 @@ export type DashboardNavItem = {
   count?: DashboardNavCount
   /** Right-aligned pill, e.g. the owner role on Admin. */
   tag?: string
+  /** Hidden from everyone but an admin — the console isn't advertised. */
+  adminOnly?: boolean
   /** Nested links, revealed while the section is open. */
   items?: DashboardNavSubItem[]
 }
@@ -91,16 +104,41 @@ export const dashboardNav: DashboardNavGroup[] = [
         ],
       },
       {
-        href: `${APP_ROOT}/admin`,
+        href: ADMIN_ROUTE,
         label: "Admin",
         icon: ShieldIcon,
         tag: "Owner",
+        adminOnly: true,
+        // Same treatment as Settings: the sections appear underneath while
+        // you're inside the console.
+        items: [
+          { href: ADMIN_ROUTE, label: "Overview" },
+          { href: ADMIN_USERS_ROUTE, label: "Users" },
+          { href: ADMIN_SECURITY_ROUTE, label: "Security" },
+          { href: ADMIN_LOGS_ROUTE, label: "Logs" },
+        ],
       },
     ],
   },
 ]
 
 const navItems = dashboardNav.flatMap((group) => group.items)
+
+/**
+ * The nav as this user should see it. Admin-only entries are dropped rather
+ * than disabled — the console is staff furniture, and a greyed-out link tells
+ * everyone it exists. The route guards itself either way.
+ */
+export function visibleDashboardNav(isAdmin: boolean) {
+  if (isAdmin) return dashboardNav
+
+  return dashboardNav
+    .map((group) => ({
+      ...group,
+      items: group.items.filter((item) => !item.adminOnly),
+    }))
+    .filter((group) => group.items.length > 0)
+}
 
 /** True for the item's own route and anything nested under it. */
 export function isDashboardNavItemActive(
